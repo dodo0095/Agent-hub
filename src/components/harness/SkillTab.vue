@@ -10,6 +10,9 @@
         <button class="btn btn-outline" @click="showImportModal = true">
           📥 {{ t('harness.skill.import') }}
         </button>
+        <button class="btn btn-outline" @click="showCreateModal = true">
+          ✨ 新增
+        </button>
       </div>
 
       <!-- Search Row -->
@@ -74,8 +77,23 @@
       @do-import="doImport"
     />
 
+    <!-- Create Modal -->
+    <SkillCreateModal
+      :show="showCreateModal"
+      :project-paths="projectPaths"
+      @close="showCreateModal = false"
+      @created="onSkillCreated"
+    />
+
     <!-- Right Panel -->
-    <SkillDetailPanel :skill="store.selectedSkill ?? null" />
+    <SkillDetailPanel
+      :skill="store.selectedSkill ?? null"
+      :project-paths="projectPaths"
+      @save="onSkillSaved"
+      @delete="onSkillDeleted"
+      @toggle="onSkillToggled"
+      @deploy="onSkillDeployed"
+    />
   </div>
 </template>
 
@@ -88,15 +106,17 @@ import type { SkillItem } from '../../stores/harness';
 import SkillList from './SkillList.vue';
 import SkillExportModal from './SkillExportModal.vue';
 import SkillImportModal from './SkillImportModal.vue';
+import SkillCreateModal from './SkillCreateModal.vue';
 import SkillDetailPanel from './SkillDetailPanel.vue';
 
 const { t } = useI18n();
 const store = useHarnessStore();
 const ipc = useIpc();
 
-// ── Export / Import state ─────────────────────────────────
+// ── Export / Import / Create state ───────────────────────
 const showExportModal = ref(false);
 const showImportModal = ref(false);
+const showCreateModal = ref(false);
 const exportJson = ref('');
 const importJson = ref('');
 const importError = ref('');
@@ -194,6 +214,26 @@ function projLabel(path?: string): string {
 
 function onEditSkill(_skill: SkillItem) {
   // Placeholder — will be wired to IPC in a future sprint
+}
+
+async function onSkillCreated() {
+  await store.fetchSkills();
+}
+
+async function onSkillSaved(_name: string, _content: string, _scope: string, _projectPath?: string) {
+  await store.fetchSkills();
+}
+
+async function onSkillDeleted(_name: string, _scope: string, _projectPath?: string) {
+  await store.fetchSkills();
+}
+
+async function onSkillToggled(_name: string, _enabled: boolean, _scope: string, _projectPath?: string) {
+  await store.fetchSkills();
+}
+
+async function onSkillDeployed(_name: string, _projects: string[]) {
+  await store.fetchSkills();
 }
 </script>
 
