@@ -77,6 +77,9 @@
         </label>
 
         <div class="actions-right">
+          <!-- Toggle error -->
+          <span v-if="toggleError" class="action-error">{{ toggleError }}</span>
+
           <!-- Delete: normal state -->
           <template v-if="skill.source !== 'system' && !showDeleteConfirm">
             <button
@@ -90,6 +93,7 @@
 
           <!-- Delete: inline confirm -->
           <template v-else-if="skill.source !== 'system' && showDeleteConfirm">
+            <span v-if="deleteError" class="action-error">{{ deleteError }}</span>
             <span class="confirm-text">確定刪除？</span>
             <button
               class="btn btn-danger btn-sm"
@@ -205,9 +209,11 @@ const saveError = ref('');
 // ── Delete state ──────────────────────────────────────────
 const showDeleteConfirm = ref(false);
 const deleting = ref(false);
+const deleteError = ref('');
 
 // ── Toggle state ──────────────────────────────────────────
 const toggling = ref(false);
+const toggleError = ref('');
 
 // ── Deploy state ──────────────────────────────────────────
 const selectedDeployProjects = ref<string[]>([]);
@@ -219,6 +225,8 @@ watch(() => props.skill, () => {
   mode.value = 'preview';
   saveError.value = '';
   showDeleteConfirm.value = false;
+  deleteError.value = '';
+  toggleError.value = '';
   selectedDeployProjects.value = [];
   deployResult.value = '';
 });
@@ -259,14 +267,15 @@ async function handleSave() {
 async function handleDelete() {
   if (!props.skill) return;
   deleting.value = true;
+  deleteError.value = '';
   try {
     await ipc.deleteSkill(props.skill.name, props.skill.scope, props.skill.projectPath);
     emit('delete', props.skill.name, props.skill.scope, props.skill.projectPath);
+    showDeleteConfirm.value = false;
   } catch (e: unknown) {
-    console.error('Delete skill failed:', e);
+    deleteError.value = `刪除失敗：${String(e)}`;
   } finally {
     deleting.value = false;
-    showDeleteConfirm.value = false;
   }
 }
 
@@ -275,11 +284,12 @@ async function handleToggle(e: Event) {
   if (!props.skill) return;
   const enabled = (e.target as HTMLInputElement).checked;
   toggling.value = true;
+  toggleError.value = '';
   try {
     await ipc.toggleSkill(props.skill.name, enabled, props.skill.scope, props.skill.projectPath);
     emit('toggle', props.skill.name, enabled, props.skill.scope, props.skill.projectPath);
   } catch (err: unknown) {
-    console.error('Toggle skill failed:', err);
+    toggleError.value = `切換失敗：${String(err)}`;
   } finally {
     toggling.value = false;
   }
@@ -520,6 +530,15 @@ function formatSize(bytes: number): string {
 .confirm-text {
   font-size: 12px;
   color: var(--color-warning, #f59e0b);
+}
+
+.action-error {
+  font-size: 11px;
+  color: var(--color-danger, #ff6b6b);
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+  border-radius: 4px;
+  padding: 3px 7px;
 }
 
 /* Toggle Switch */
