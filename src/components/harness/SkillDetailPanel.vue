@@ -312,6 +312,9 @@ async function handleDeploy() {
   }
 }
 
+// ── Expose ────────────────────────────────────────────────
+defineExpose({ enterEditMode });
+
 // ── Helpers ───────────────────────────────────────────────
 function projLabel(path?: string): string {
   if (!path) return t('harness.skill.unknownProject');

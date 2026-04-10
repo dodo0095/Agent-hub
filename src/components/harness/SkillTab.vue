@@ -87,6 +87,7 @@
 
     <!-- Right Panel -->
     <SkillDetailPanel
+      ref="detailPanelRef"
       :skill="store.selectedSkill ?? null"
       :project-paths="projectPaths"
       @save="onSkillSaved"
@@ -94,11 +95,16 @@
       @toggle="onSkillToggled"
       @deploy="onSkillDeployed"
     />
+
+    <!-- Toast -->
+    <Transition name="toast">
+      <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useHarnessStore } from '../../stores/harness';
 import { useIpc } from '../../composables/useIpc';
@@ -112,6 +118,19 @@ import SkillDetailPanel from './SkillDetailPanel.vue';
 const { t } = useI18n();
 const store = useHarnessStore();
 const ipc = useIpc();
+
+// ── Template refs ─────────────────────────────────────────
+const detailPanelRef = ref<InstanceType<typeof SkillDetailPanel> | null>(null);
+
+// ── Toast state ───────────────────────────────────────────
+const toastMessage = ref('');
+const toastTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+
+function showToast(msg: string) {
+  toastMessage.value = msg;
+  if (toastTimer.value) clearTimeout(toastTimer.value);
+  toastTimer.value = setTimeout(() => { toastMessage.value = ''; }, 3000);
+}
 
 // ── Export / Import / Create state ───────────────────────
 const showExportModal = ref(false);
@@ -212,8 +231,10 @@ function projLabel(path?: string): string {
   return parts[parts.length - 1] || path;
 }
 
-function onEditSkill(_skill: SkillItem) {
-  // Placeholder — will be wired to IPC in a future sprint
+async function onEditSkill(skill: SkillItem) {
+  await store.selectSkill(skill.name, skill.scope, skill.projectPath);
+  await nextTick();
+  detailPanelRef.value?.enterEditMode();
 }
 
 async function onSkillCreated() {
@@ -226,14 +247,16 @@ async function onSkillSaved(_name: string, _content: string, _scope: string, _pr
 
 async function onSkillDeleted(_name: string, _scope: string, _projectPath?: string) {
   await store.fetchSkills();
+  store.selectedSkillName = null;
 }
 
 async function onSkillToggled(_name: string, _enabled: boolean, _scope: string, _projectPath?: string) {
   await store.fetchSkills();
 }
 
-async function onSkillDeployed(_name: string, _projects: string[]) {
+async function onSkillDeployed(_name: string, projects: string[]) {
   await store.fetchSkills();
+  showToast(`✅ 已成功部署到 ${projects.length} 個專案`);
 }
 </script>
 
@@ -346,6 +369,35 @@ async function onSkillDeployed(_name: string, _projects: string[]) {
   padding: 10px 14px;
   border-bottom: 1px solid var(--color-border-default);
   flex-shrink: 0;
+}
+
+/* ─── Toast ───────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-default);
+  border-left: 3px solid var(--color-success);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 2000;
+  white-space: nowrap;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.25s, transform 0.25s;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
 }
 
 /* ─── Buttons ─────────────────────────────────────────── */
