@@ -31,9 +31,9 @@ function createTerminal() {
     theme: {
       background: '#0f1117',
       foreground: '#e4e4f0',
-      cursor: '#6c5ce7',
+      cursor: '#0066cc',           // StarkLab brand blue cursor
       cursorAccent: '#0f1117',
-      selectionBackground: '#6c5ce733',
+      selectionBackground: '#0066cc33', // brand blue with 20% opacity
       black: '#0f1117',
       red: '#ff6b6b',
       green: '#00d68f',

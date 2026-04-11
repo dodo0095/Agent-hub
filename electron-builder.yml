@@ -26,6 +26,9 @@ extraResources:
       - '**/*'
   - from: node_modules/sql.js/dist/sql-wasm.wasm
     to: sql-wasm.wasm
+  # StatusLine script: used by Claude CLI to write cost/token data; must be bundled as a resource
+  - from: electron/utils/session-statusline.js
+    to: session-statusline.js
   - from: .env
     to: .env
     filter:

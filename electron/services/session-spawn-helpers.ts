@@ -5,10 +5,19 @@
  */
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { app } from 'electron';
 import { database } from './database';
 import { promptAssembler } from './prompt-assembler';
 import { logger } from '../utils/logger';
 import type { SpawnParams } from '../types';
+
+/** Resolve path to the statusline Node.js script (works in both dev and packaged). */
+function getStatuslineScriptPath(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'session-statusline.js');
+  }
+  return join(__dirname, '..', '..', 'electron', 'utils', 'session-statusline.js');
+}
 
 // ─── CLI argument builder ────────────────────────────────────────────────────
 
@@ -117,6 +126,26 @@ export function buildClaudeArgs(
 
   if (!interactive) {
     args.push('--max-turns', String(maxTurns), '--output-format', 'stream-json', '--verbose', '-p', params.task);
+  }
+
+  // Inject statusLine setting so Claude CLI writes cost/token data to the usage file.
+  // --settings expects a FILE PATH (not inline JSON), so we write a temp settings file.
+  if (interactive) {
+    const statuslineScript = getStatuslineScriptPath();
+    if (existsSync(statuslineScript)) {
+      const settingsObj = {
+        statusLine: {
+          type: 'command',
+          command: `node "${statuslineScript.replace(/\\/g, '/')}"`,
+        },
+      };
+      const settingsFile = join(promptDir, `settings-${sessionId.slice(0, 8)}.json`);
+      writeFileSync(settingsFile, JSON.stringify(settingsObj), 'utf-8');
+      args.push('--settings', settingsFile);
+      logger.info(`Session ${sessionId} statusLine → ${statuslineScript}`);
+    } else {
+      logger.warn(`Statusline script not found at ${statuslineScript}, cost tracking disabled`);
+    }
   }
 
   return { args, tmpFile };

@@ -191,10 +191,11 @@ function resultLabel(result: string): string {
   line-height: 1.6;
 }
 
-/* Hook type tags */
+/* Hook type tags — colours aligned with StarkLab brand blue palette */
 .tag-pre {
-  background: rgba(108, 92, 231, 0.15);
-  color: #a29bfe;
+  /* PreToolUse hooks: StarkLab blue */
+  background: rgba(0, 102, 204, 0.15);
+  color: #4da3ff;
 }
 
 .tag-post {
