@@ -158,7 +158,8 @@ const taskStatusLabel = computed<Record<string, string>>(() => ({
 }));
 
 // ── Chart data ──────────────────────────────────────────────
-const chartColors = ['#6c5ce7', '#22d3ee', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+// First two entries use StarkLab brand blue (#0066cc / #4da3ff); rest are semantic palette
+const chartColors = ['#0066cc', '#22d3ee', '#10b981', '#f59e0b', '#ef4444', '#4da3ff', '#ec4899', '#14b8a6'];
 
 const dailyChartData = computed(() => {
   const daily = costStats.value?.daily.slice(-14) || [];
@@ -178,12 +179,12 @@ const dailyChartData = computed(() => {
       {
         label: 'Sessions',
         data: daily.map((d) => d.sessions),
-        borderColor: '#6c5ce7',
-        backgroundColor: 'rgba(108, 92, 231, 0.1)',
+        borderColor: '#0066cc',
+        backgroundColor: 'rgba(0, 102, 204, 0.1)',
         fill: true,
         tension: 0.4,
         pointRadius: 3,
-        pointBackgroundColor: '#6c5ce7',
+        pointBackgroundColor: '#0066cc',
         yAxisID: 'y1',
       },
     ],
@@ -227,8 +228,8 @@ const projectChartData = computed(() => {
     datasets: [{
       label: 'Cost ($)',
       data: projects.map((p) => p.totalCost),
-      backgroundColor: 'rgba(108, 92, 231, 0.7)',
-      borderColor: '#6c5ce7',
+      backgroundColor: 'rgba(0, 102, 204, 0.7)',
+      borderColor: '#0066cc',
       borderWidth: 1,
       borderRadius: 4,
     }],

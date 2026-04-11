@@ -9,9 +9,10 @@ const route = useRoute();
 const router = useRouter();
 const uiStore = useUiStore();
 
+// Fallback title shown when no route-level titleKey is defined (e.g. root or unknown routes)
 const pageTitle = computed(() => {
   const key = route.meta.titleKey as string | undefined;
-  return key ? t(key) : 'Yu AgentHub';
+  return key ? t(key) : 'StarkLab AgentHub';
 });
 
 const showUserDropdown = ref(false);

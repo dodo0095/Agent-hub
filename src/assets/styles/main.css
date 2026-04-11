@@ -17,9 +17,9 @@
   --color-text-secondary: #8b8da3;
   --color-text-muted: #5c5e72;
 
-  /* Accent */
-  --color-accent: #6c5ce7;
-  --color-accent-light: #a29bfe;
+  /* Accent — StarkLab brand blue */
+  --color-accent: #0066cc;
+  --color-accent-light: #4da3ff;
 
   /* Semantic */
   --color-success: #00d68f;
@@ -62,8 +62,9 @@
   --color-text-primary: #1a1c2e;
   --color-text-secondary: #5c5e72;
   --color-text-muted: #8b8da3;
-  --color-accent: #6c5ce7;
-  --color-accent-light: #5a4bd6;
+  /* Accent — StarkLab brand blue (light mode: darker shade for contrast on white bg) */
+  --color-accent: #0066cc;
+  --color-accent-light: #0055aa;
   --color-success: #00b377;
   --color-success-dim: #00b37722;
   --color-warning: #e69500;

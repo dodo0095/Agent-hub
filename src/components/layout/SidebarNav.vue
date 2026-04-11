@@ -43,15 +43,14 @@ function isActive(item: { to: string }): boolean {
     @mouseenter="expanded = true"
     @mouseleave="expanded = false"
   >
-    <!-- Brand -->
-    <div class="flex items-center gap-2.5 px-3 pb-4 pt-2">
-      <div
-        class="flex h-7 w-7 min-w-[28px] items-center justify-center rounded-lg text-sm font-bold text-white"
-        style="background: linear-gradient(135deg, #6c5ce7, #22d3ee)"
-      >
-        Y
-      </div>
-      <span class="sidebar-label text-base font-bold tracking-tight">Yu Agent</span>
+    <!-- Brand — replaced the old "Y" text avatar with the official StarkLab logo image -->
+    <div class="flex items-center gap-2 px-3 pb-4 pt-2">
+      <img
+        src="../../assets/starklab_logo.png"
+        alt="史塔克實驗室"
+        class="h-7 w-7 min-w-[28px] rounded-md object-cover"
+      />
+      <span class="sidebar-label text-sm font-bold tracking-tight text-text-primary">史塔克實驗室</span>
     </div>
 
     <!-- Nav groups -->

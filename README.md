@@ -1,14 +1,40 @@
 <div align="center">
 
-# Yu AgentHub
+# StarkLab AgentHub
 
-### AI Agent Team Management Platform — Enhanced Fork
+### AI Agent Team Management Platform — 史塔克實驗室 Edition
 
 Forked from [Stanshy/AgentHub](https://github.com/Stanshy/AgentHub), with significant enhancements in cross-agent communication, execution observability, and intelligent task orchestration.
 
-**[Quick Start](#quick-start)** · **[What's New](#whats-new-in-this-fork)** · **[Architecture](#architecture)**
+**[Quick Start](#quick-start)** · **[What's New](#whats-new-in-this-fork)** · **[Latest Updates](#latest-updates)** · **[Architecture](#architecture)**
 
 </div>
+
+---
+
+## Latest Updates
+
+### 2026-04-11 — Brand Rebrand + StatusLine Cost Tracking
+
+#### 🎨 Brand Rebrand: StarkLab
+- **Logo** — Replaced the placeholder "Y" avatar with the official `starklab_logo.png` in the sidebar
+- **Name** — Renamed from "Yu AgentHub" → **StarkLab AgentHub** across all UI surfaces
+- **Accent colour** — Global theme colour changed from purple (`#6c5ce7`) to **StarkLab brand blue** (`#0066cc` / `#4da3ff`) in:
+  - CSS custom properties (`main.css`) — both dark and light themes
+  - Terminal cursor & selection highlight (`SessionTerminal.vue`)
+  - Hook type tag (`HookLogsTable.vue`)
+  - Harness topbar icon (`HarnessView.vue`)
+  - Dashboard chart colours (`DashboardView.vue`)
+
+#### ⚡ StatusLine Cost Tracking
+- **New script** — `electron/utils/session-statusline.js` reads Claude CLI's usage data and writes cost/token info to a shared file
+- **Auto path resolution** — `getStatuslineScriptPath()` resolves the correct path in both **dev** (`__dirname`) and **packaged** (`process.resourcesPath`) environments
+- **Session injection** — Interactive sessions automatically write a temp `settings-{id}.json` and pass it to Claude CLI via `--settings`, enabling real-time cost tracking without manual config
+- **Build bundling** — `electron-builder.yml` now includes `session-statusline.js` as an `extraResource` so it is available in production builds
+
+#### 📚 Knowledge Base
+- Added `.knowledge/company-rules.md`, `team-workflow.md`, `postmortem-common.md`
+- Added `.knowledge/templates/` — Sprint proposal, dev plan, internal review, postmortem templates
 
 ---
 
@@ -202,6 +228,6 @@ MIT
 
 *Built for one-person companies that think big.*
 
-**[GitHub](https://github.com/shenjuneyu/yu-agent-hub)**
+**[GitHub](https://github.com/dodo0095/Agent-hub)**
 
 </div>

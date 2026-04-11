@@ -112,7 +112,8 @@ async function stopSession() {
     <!-- TopBar -->
     <div class="harness-topbar">
       <div class="harness-topbar-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Bolt icon — stroke uses StarkLab accent-light (#4da3ff) -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4da3ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
       </div>
