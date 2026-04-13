@@ -1,7 +1,7 @@
 {
-  "name": "yu-agenthub",
-  "version": "0.2.0",
-  "description": "Yu AgentHub - AI Agent Team Management Platform (Enhanced Fork)",
+  "name": "starklab",
+  "version": "1.0.0",
+  "description": "StarkLab AgentHub - AI Agent Team Management Platform",
   "license": "MIT",
   "main": "./out/main/index.js",
   "scripts": {

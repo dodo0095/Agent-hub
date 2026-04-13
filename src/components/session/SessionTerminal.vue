@@ -39,7 +39,7 @@ function createTerminal() {
       green: '#00d68f',
       yellow: '#ffaa00',
       blue: '#339af0',
-      magenta: '#6c5ce7',
+      magenta: '#4da3ff', // StarkLab brand blue-light
       cyan: '#22d3ee',
       white: '#e4e4f0',
       brightBlack: '#5c5e72',

@@ -15,6 +15,7 @@ const DEPARTMENT_LABELS: Record<string, string> = {
   'studio-operations': '工作室營運',
   company: '公司管理',
   bonus: '特殊',
+  'academic-research': '學術研究部',
 };
 
 const DEPARTMENT_COLORS: Record<string, string> = {
@@ -27,6 +28,7 @@ const DEPARTMENT_COLORS: Record<string, string> = {
   'studio-operations': 'yellow',
   company: 'cyan',
   bonus: 'purple',
+  'academic-research': 'indigo',
 };
 
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
@@ -84,6 +86,14 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   'joker': '小丑',
   'studio-coach': '工作室教練',
   'company-manager': '公司知識管理者',
+  // academic-research
+  'research-director': '研究總監',
+  'literature-scout': '文獻搜尋員',
+  'paper-writer': '論文撰寫員',
+  'research-analyst': '研究分析員',
+  'manuscript-reviewer': '稿件審查員',
+  'research-visualizer': '研究視覺化員',
+  'grant-writer': '計畫申請撰寫員',
 };
 
 /**

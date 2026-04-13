@@ -4,7 +4,7 @@ defineProps<{
 }>();
 
 const colorClasses: Record<string, string> = {
-  purple: 'bg-[#6c5ce733] text-accent-light',
+  purple: 'bg-[#0066cc22] text-accent-light',
   green: 'bg-success-dim text-success',
   yellow: 'bg-warning-dim text-warning',
   red: 'bg-danger-dim text-danger',

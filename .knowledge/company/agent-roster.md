@@ -1,6 +1,8 @@
 # Agent 團隊資源表
 
-> 共 45 位 Agent，8 部門。L1 為部門領導，L2 為專業執行者。
+> 共 52 位 Agent，9 部門。L1 為部門領導，L2 為專業執行者。
+>
+> 📝 Sprint 4 新增：學術研究部（academic-research）7 位 Agent，詳細欄位見 `.knowledge/academic/department-structure.md`
 
 ---
 
@@ -81,6 +83,21 @@
 | legal-compliance-checker | L2 | 法規合規、隱私政策、條款審查 |
 | support-responder | L2 | 客戶支援、FAQ 維護、支援流程優化 |
 | context-manager | L2 | 對話摘要、決策提取、跨 Session 知識延續 |
+
+## 學術研究部 (academic-research) ⭐ Sprint 4 新增
+
+> 支援四條學術工作流程：期刊投稿 / 研討會論文 / 論文審稿 / **國科會計畫申請**
+> E2E 測試題材：金融科技 × AI/LLM
+
+| Agent ID | 中文名稱 | 層級 | 職責 |
+|----------|----------|------|------|
+| research-director | 研究總監 | L1 | 部門領導。研究方向統籌、Agent Prompt 設計、最終審核 |
+| literature-scout | 文獻搜尋員 | L2 | 系統性文獻搜尋、DOI 驗證、跨資料庫查核（PubMed / OpenAlex / bioRxiv）|
+| paper-writer | 論文撰寫員 | L2 | IMRAD 論文撰寫、venue 格式套用、修訂稿件 |
+| research-analyst | 研究分析員 | L2 | 統計分析、研究假說生成、文獻批判性評估 |
+| manuscript-reviewer | 稿件審查員 | L2 | 同儕審稿、方法論驗證、Major/Minor 意見產出 |
+| research-visualizer | 研究視覺化員 | L2 | 研究圖表、投影片、學術海報、甘特圖 |
+| grant-writer | 計畫申請撰寫員 | L2 | **國科會計畫書撰寫（nstc-grant Skill 專屬使用者）** |
 
 ## 特別單位 (bonus)
 
