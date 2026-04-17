@@ -22,8 +22,27 @@
 │   └── ux-researcher — L2
 ├── qa-lead — L1
 │   └── test-writer-fixer — L2
+├── research-director — L1（學術研究部門，Sprint 4 新增）
+│   ├── paper-writer — L2（期刊/研討會論文）
+│   ├── grant-writer — L2（國科會計畫申請）
+│   ├── manuscript-reviewer — L2（論文審稿）
+│   ├── literature-scout — L2（文獻搜尋）
+│   ├── research-analyst — L2（統計分析）
+│   └── research-visualizer — L2（圖表/投影片）
 └── 公司管理 Agent — L1（知識庫回饋專用）
 ```
+
+### 學術研究部門職責說明
+
+| Agent | 負責領域 | 對應工作流程 |
+|-------|---------|------------|
+| research-director | 部門指揮、品質把關、最終審核 | 全部四條工作流程 |
+| paper-writer | IMRAD 論文撰寫、格式套用 | 期刊投稿、研討會論文 |
+| grant-writer | 國科會計畫書 CM01~CM12 撰寫 | 國科會計畫申請 |
+| manuscript-reviewer | 結構化審稿意見（Major/Minor Revisions）| 論文審稿 |
+| literature-scout | 多資料庫文獻搜尋、DOI 驗證 | 全部四條工作流程（支援）|
+| research-analyst | 研究缺口分析、假說生成、統計方法 | 全部四條工作流程（支援）|
+| research-visualizer | Mermaid 流程圖、Marp 投影片、甘特圖 | 全部四條工作流程（支援）|
 
 ---
 

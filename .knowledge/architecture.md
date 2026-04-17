@@ -98,6 +98,22 @@
 | Skill: `/knowledge-feedback` | 掃描子專案 postmortem → 分類 → 提出公司規範修改建議（僅部署到 AgentHub） |
 | SkillGenerator 擴充 | `AGENTHUB_ONLY_SKILLS` 清單，排除公司專用 Skill 部署到子專案 |
 
+### Sprint 4 新增：學術研究部門（academic-research）
+
+| Agent | 層級 | 主責 | 可用 Skills |
+|-------|------|------|-----------|
+| research-director | L1 | 部門指揮、E2E 期刊/研討會流程 | academic-writing, lit-review, cite-manage, stat-analysis, schematics, venue-format |
+| paper-writer | L2 | 期刊論文、研討會論文 | academic-writing, lit-review, cite-manage, venue-format, research-slides, research-poster |
+| grant-writer | L2 | 國科會計畫申請 | nstc-grant, grant-writing, hypothesis, stat-analysis |
+| manuscript-reviewer | L2 | 論文同儕審稿 | peer-review, critical-thinking, scholar-eval |
+| literature-scout | L2 | 文獻搜尋與管理 | lit-review, cite-manage, scholar-eval |
+| research-analyst | L2 | 統計分析、假說生成 | stat-analysis, hypothesis, critical-thinking |
+| research-visualizer | L2 | 圖表製作、投影片 | schematics, research-slides, research-poster |
+
+> **Skill 整合策略（Wrapper 模式）**：14 個 Skills 以 50-80 行 wrapper 封裝，引用 `claude-scientific-skills/scientific-skills/` 目錄。若該目錄被移動，14 個 wrapper 需同步更新路徑（已知風險，已接受）。
+
+> **產出隔離**：所有學術產出物存放於 `.outputs/` 目錄，已加入 `.gitignore`，防止未發表論文外流。
+
 ### Sprint 5 新增（已實作）
 
 | 工具 | 檔案 | 職責 |
