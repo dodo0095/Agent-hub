@@ -67,6 +67,28 @@ npm run build        # 打包
 | `.knowledge/doc-governance.md` | 文件治理 8 條完整規則 | v1.0 |
 | `.knowledge/team-hierarchy.md` | 團隊架構、指揮鏈、Sprint 概覽 | v1.0 |
 
+### 學術研究部門（.knowledge/academic/）
+
+> Sprint 4 新增：academic-research 部門，服務東吳大學資料科學系教授完成四條學術工作流程。
+
+| 文件 | 用途 | 版本 |
+|------|------|------|
+| `.knowledge/academic/agent-prompts.md` | 7 位學術 Agent System Prompt | v1.0 |
+| `.knowledge/academic/venue-list.md` | 期刊 + 研討會清單（含金融科技強化）| v1.1 |
+| `.knowledge/academic/scholar-profile.md` | 老闆學者檔案、自引清單 | v1.0 |
+| `.knowledge/academic/sop-journal.md` | 期刊投稿完整 SOP | v1.0 |
+| `.knowledge/academic/sop-conference.md` | 研討會論文 SOP | v1.0 |
+| `.knowledge/academic/sop-peer-review.md` | 論文審稿 SOP | v1.0 |
+| `.knowledge/academic/sop-nstc-grant.md` | 國科會計畫申請 SOP | v1.0 |
+
+### 學術 Skill 規範（.knowledge/specs/）
+
+| 文件 | 用途 |
+|------|------|
+| `.knowledge/specs/api-design.md` | Skill 命名規範、frontmatter 格式 |
+| `.knowledge/specs/data-model.md` | Agent-Skill 綁定表 |
+| `.knowledge/specs/feature-spec.md` | 四條工作流程功能規格 |
+
 ### 公司規範（.knowledge/company/）
 
 | 文件 | 用途 |

@@ -82,3 +82,46 @@ v2: Harness（Skill + Hook + FileWatcher）驅動一切 → GUI 只做監控
 | 打包 | electron-builder | |
 
 > 已移除：monaco-editor, @notionhq/client, simple-git
+
+---
+
+## 學術類 Skills（Sprint 4 新增）
+
+> **部門**：academic-research
+> **服務對象**：東吳大學資料科學系教授（邱嘉豪）
+> **整合策略**：Wrapper 模式（從 `claude-scientific-skills/scientific-skills/` 引用，50-80 行封裝）
+
+| Skill 指令 | 用途 | 原始來源 |
+|-----------|------|---------|
+| `/academic-writing` | IMRAD 結構論文撰寫（禁 bullet points）| scientific-skills |
+| `/lit-review` | 系統性文獻回顧 + DOI 驗證 | scientific-skills |
+| `/cite-manage` | 引用管理、BibTeX 產出 | scientific-skills |
+| `/stat-analysis` | 統計方法設計、假設檢定 | scientific-skills |
+| `/critical-thinking` | 科學批判性評估 | scientific-skills |
+| `/schematics` | 研究圖表製作 | scientific-skills |
+| `/venue-format` | 期刊/研討會格式套用 | scientific-skills |
+| `/research-slides` | 研討會投影片（PPTX）| scientific-skills |
+| `/research-poster` | 學術海報（PPTX 單頁大尺寸）| scientific-skills |
+| `/peer-review` | 論文同儕審稿報告 | scientific-skills |
+| `/scholar-eval` | 研究者學術影響力評估 | scientific-skills |
+| `/grant-writing` | 國際計畫框架（NSF/NIH，作為國科會參考）| scientific-skills |
+| `/hypothesis` | 研究假說生成（H0/H1）| scientific-skills |
+| `/nstc-grant` | 國科會專題研究計畫申請書（自建）| AgentHub 原生 |
+
+### 四條學術工作流程
+
+| 流程 | 產出 | 主責 Agent |
+|------|------|-----------|
+| 期刊投稿 | IMRAD 英文論文 | paper-writer + research-director |
+| 研討會論文 | 4-8 頁短篇 + 投影片 | paper-writer + research-director |
+| 論文審稿 | 結構化審稿意見（Major/Minor）| manuscript-reviewer |
+| 國科會計畫申請 | CM01~CM12 完整計畫書 | grant-writer |
+
+### 產出目錄
+
+| 目錄 | 說明 |
+|------|------|
+| `.outputs/papers/` | 論文草稿（已加入 .gitignore，防未發表論文外流）|
+| `.outputs/grants/` | 國科會計畫書草稿 |
+| `.outputs/reviews/` | 審稿報告 |
+| `.outputs/slides/` | 研討會投影片 |
