@@ -12,7 +12,7 @@ class TrayService {
       const iconPath = join(__dirname, '../../build/icon.png');
       const icon = nativeImage.createFromPath(iconPath);
       this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
-      this.tray.setToolTip('Yu AgentHub - AI Studio');
+      this.tray.setToolTip('Starklab AgentHub - AI Studio');
 
       this.updateContextMenu(mainWindow);
 
@@ -33,7 +33,7 @@ class TrayService {
     const activeCount = sessionManager.getActiveCount();
     const menu = Menu.buildFromTemplate([
       {
-        label: 'Yu AgentHub',
+        label: 'Starklab AgentHub',
         enabled: false,
       },
       { type: 'separator' },

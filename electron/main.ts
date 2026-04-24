@@ -140,7 +140,7 @@ function setupEventForwarding(): void {
 }
 
 app.whenReady().then(async () => {
-  logger.info('Yu AgentHub starting...');
+  logger.info('Starklab AgentHub starting...');
 
   // Initialize database (async for sql.js WASM loading)
   await database.initialize();
@@ -159,7 +159,7 @@ app.whenReady().then(async () => {
   // Application menu with Edit role (enables Ctrl+C/V/X/A keyboard shortcuts)
   const appMenu = Menu.buildFromTemplate([
     {
-      label: 'Yu AgentHub',
+      label: 'Starklab AgentHub',
       submenu: [
         { label: t('electron.menu.about'), role: 'about' },
         { type: 'separator' },

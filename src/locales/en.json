@@ -692,7 +692,7 @@
   },
   "electron": {
     "menu": {
-      "about": "About Yu AgentHub",
+      "about": "About Starklab AgentHub",
       "quit": "Quit",
       "edit": "Edit",
       "undo": "Undo",

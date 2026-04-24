@@ -1,5 +1,5 @@
 appId: com.yu-agenthub.app
-productName: Yu AgentHub
+productName: Starklab AgentHub
 directories:
   buildResources: build
 files:

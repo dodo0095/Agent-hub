@@ -1,5 +1,5 @@
 #!/bin/bash
-# Session-specific status line for Yu AgentHub
+# Session-specific status line for Starklab AgentHub
 # Reads Claude Code status JSON from stdin, extracts cost/token data,
 # writes to a shared file for the main process to read.
 #

@@ -1,6 +1,6 @@
 <div align="center">
 
-# Yu AgentHub
+# Starklab AgentHub
 
 ### AI Agent 團隊管理平台 — 增強版 Fork
 
@@ -11,6 +11,21 @@
 </div>
 
 [English](README.md) | [繁體中文](README.zh-TW.md)
+
+---
+
+## 最新更新
+
+### 2026-04-24 — 視窗標題更名為 Starklab AgentHub
+
+- **視窗標題** — 全站從 `Yu AgentHub` 改為 `Starklab AgentHub`：
+  - `src/index.html` — 瀏覽器 `<title>` 標籤
+  - `electron-builder.yml` — `productName`（安裝程式 / 工作列）
+  - `electron/main.ts` — 啟動 log + macOS 應用程式選單 label
+  - `electron/services/tray-service.ts` — 系統匣 tooltip + 右鍵選單 label
+  - `src/locales/en.json` — About 選單英文文字
+  - `src/locales/zh-TW.json` — About 選單中文文字
+  - `electron/utils/session-statusline.sh` — 腳本註解標頭
 
 ---
 

@@ -692,7 +692,7 @@
   },
   "electron": {
     "menu": {
-      "about": "關於 Yu AgentHub",
+      "about": "關於 Starklab AgentHub",
       "quit": "結束",
       "edit": "編輯",
       "undo": "復原",

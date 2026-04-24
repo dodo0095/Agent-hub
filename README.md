@@ -14,6 +14,19 @@ Forked from [Stanshy/AgentHub](https://github.com/Stanshy/AgentHub), with signif
 
 ## Latest Updates
 
+### 2026-04-24 — Window Title Rename to Starklab AgentHub
+
+- **Window title** — Changed from `Yu AgentHub` → `Starklab AgentHub` across all surfaces:
+  - `src/index.html` — browser `<title>` tag
+  - `electron-builder.yml` — `productName` (installer / taskbar)
+  - `electron/main.ts` — startup log + macOS app menu label
+  - `electron/services/tray-service.ts` — system tray tooltip + context menu label
+  - `src/locales/en.json` — "About" menu English text
+  - `src/locales/zh-TW.json` — "About" menu Chinese text
+  - `electron/utils/session-statusline.sh` — script comment header
+
+---
+
 ### 2026-04-11 — Brand Rebrand + StatusLine Cost Tracking
 
 #### 🎨 Brand Rebrand: StarkLab
