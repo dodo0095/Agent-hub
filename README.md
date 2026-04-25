@@ -14,6 +14,15 @@ Forked from [Stanshy/AgentHub](https://github.com/Stanshy/AgentHub), with signif
 
 ## Latest Updates
 
+### 2026-04-25 — Claude-Mem 脫鉤 + Hook 路徑修正
+
+- **claude-mem 完全移除** — 從 `~/.claude/settings.json` 清除 `extraKnownMarketplaces` 與 `enabledPlugins` 登記；`installed_plugins.json` 清空；Worker process 確認已停止
+- **Hook 路徑修正** — 所有 `.claude/hooks/*.js` 的呼叫改用 Node.js 完整路徑（`/c/Program Files/nodejs/node`），解決 `/usr/bin/bash` 執行環境 PATH 找不到 `node` 的問題
+- **stop-validator 修正** — `execSync('npm ...')` 改用 `process.execPath` + npm-cli.js 完整路徑，確保 Stop Hook 能正確執行 test/lint
+- **Lint 修正** — 修復 `project-sync.ts`（3 處 `no-useless-escape`）、`session-manager.ts`（ternary statement `no-unused-expressions`）、`SkillCreateModal.vue`（`no-useless-escape`），lint 現在 0 errors
+
+---
+
 ### 2026-04-24 — Window Title Rename to Starklab AgentHub
 
 - **Window title** — Changed from `Yu AgentHub` → `Starklab AgentHub` across all surfaces:
