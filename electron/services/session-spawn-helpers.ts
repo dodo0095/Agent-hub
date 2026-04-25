@@ -130,19 +130,25 @@ export function buildClaudeArgs(
 
   // Inject statusLine setting so Claude CLI writes cost/token data to the usage file.
   // --settings expects a FILE PATH (not inline JSON), so we write a temp settings file.
+  // IMPORTANT: Pass the usage file path as a CLI arg to the script (not just env var)
+  // because env var inheritance via Claude Code's statusLine subprocess is not
+  // guaranteed on Windows ConPTY. The script accepts argv[2] as primary path.
   if (interactive) {
     const statuslineScript = getStatuslineScriptPath();
     if (existsSync(statuslineScript)) {
+      const usageFile = join(process.cwd(), '.maestro-usage', `${sessionId}.json`);
+      const scriptPath = statuslineScript.replace(/\\/g, '/');
+      const usageFilePath = usageFile.replace(/\\/g, '/');
       const settingsObj = {
         statusLine: {
           type: 'command',
-          command: `node "${statuslineScript.replace(/\\/g, '/')}"`,
+          command: `node "${scriptPath}" "${usageFilePath}"`,
         },
       };
       const settingsFile = join(promptDir, `settings-${sessionId.slice(0, 8)}.json`);
       writeFileSync(settingsFile, JSON.stringify(settingsObj), 'utf-8');
       args.push('--settings', settingsFile);
-      logger.info(`Session ${sessionId} statusLine → ${statuslineScript}`);
+      logger.info(`Session ${sessionId} statusLine → ${statuslineScript} (usage: ${usageFile})`);
     } else {
       logger.warn(`Statusline script not found at ${statuslineScript}, cost tracking disabled`);
     }
