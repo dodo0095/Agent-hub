@@ -32,7 +32,8 @@
 
 | 服務 | 檔案 | 職責 |
 |------|------|------|
-| SessionManager | `session-manager.ts` | Session 生命週期、PTY 管理、輸出緩衝 |
+| SessionManager | `session-manager.ts` | Session 生命週期、PTY 管理、輸出緩衝、Cost Tracking |
+| SessionCostTracker | `session-cost-tracker.ts` | Token/cost 解析（PTY 文字 + statusLine 檔案輪詢）|
 | Database | `database.ts` | sql.js 初始化、migration、CRUD |
 | AgentLoader | `agent-loader.ts` | 載入 Agent YAML 定義 |
 | PromptAssembler | `prompt-assembler.ts` | 組裝 System Prompt |

@@ -68,6 +68,29 @@ export function parseInteractiveTokenUsage(usage: SessionUsage, data: string): b
     if (out > usage.outputTokens) { usage.outputTokens = Math.round(out); updated = true; }
   }
 
+  // Pattern 4: Our own statusLine format — "tok: 6.7k  $0.0523"
+  // Matches output from session-statusline.js: "{model}  ctx: X%  tok: X[k|m]  $X.XXXX"
+  // This is a fallback in case the file-based mechanism (AGENTHUB_USAGE_FILE) fails.
+  const slMatch = data.match(/tok:\s*(\d+(?:\.\d+)?)\s*(k|m)?\s+\$(\d+\.\d+)/i);
+  if (slMatch) {
+    let total = parseFloat(slMatch[1]);
+    const unit = (slMatch[2] || '').toLowerCase();
+    if (unit === 'k') total *= 1000;
+    else if (unit === 'm') total *= 1000000;
+    total = Math.round(total);
+    const cost = parseFloat(slMatch[3]);
+    if (total > usage.inputTokens + usage.outputTokens) {
+      // Split estimate: 30% input / 70% output (same heuristic as Pattern 2)
+      usage.inputTokens = Math.round(total * 0.3);
+      usage.outputTokens = total - usage.inputTokens;
+      updated = true;
+    }
+    if (cost > usage.costUsd) {
+      usage.costUsd = cost;
+      updated = true;
+    }
+  }
+
   return updated;
 }
 

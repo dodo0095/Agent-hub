@@ -16,7 +16,10 @@ let input = '';
 process.stdin.setEncoding('utf-8');
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
-  const usageFile = process.env.AGENTHUB_USAGE_FILE;
+  // Accept usage file path from CLI arg (primary) or env var (fallback).
+  // CLI arg is preferred because env var inheritance via Claude Code's statusLine
+  // subprocess is not guaranteed on all platforms (especially Windows ConPTY).
+  const usageFile = process.argv[2] || process.env.AGENTHUB_USAGE_FILE;
   if (!usageFile) process.exit(0);
 
   try {
