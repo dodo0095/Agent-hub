@@ -594,7 +594,11 @@ class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    parsed.type === 'result' ? applyResultEventUsage(session, parsed) : applyParsedEventUsage(session, parsed);
+    if (parsed.type === 'result') {
+      applyResultEventUsage(session, parsed);
+    } else {
+      applyParsedEventUsage(session, parsed);
+    }
 
     const statusMap: Record<string, SessionStatus> = { assistant: 'thinking', tool_use: 'executing_tool' };
     const newStatus = statusMap[parsed.type];

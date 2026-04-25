@@ -128,7 +128,7 @@ watch(() => props.show, (val) => {
 });
 
 // ── Validation ────────────────────────────────────────────
-const NAME_PATTERN = /^[a-zA-Z0-9_\-]+$/;
+const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 function validate(): boolean {
   let ok = true;

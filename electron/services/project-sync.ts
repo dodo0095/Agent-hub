@@ -592,7 +592,7 @@ class ProjectSyncService {
       let content = fs.readFileSync(filePath, 'utf-8');
 
       // Replace status in markdown table: "| 狀態 | xxx |" → "| 狀態 | newStatus |"
-      const statusRegex = /(\|\s*狀態\s*\|\s*)([^\|]+)(\|)/;
+      const statusRegex = /(\|\s*狀態\s*\|\s*)([^|]+)(\|)/;
       if (statusRegex.test(content)) {
         content = content.replace(statusRegex, `$1${newStatus} $3`);
       }
@@ -600,12 +600,12 @@ class ProjectSyncService {
       // Update timestamps
       const now = new Date().toISOString();
       if (newStatus === 'in_progress') {
-        const startRegex = /(\|\s*開始時間\s*\|\s*)([^\|]+)(\|)/;
+        const startRegex = /(\|\s*開始時間\s*\|\s*)([^|]+)(\|)/;
         if (startRegex.test(content)) {
           content = content.replace(startRegex, `$1${now} $3`);
         }
       } else if (newStatus === 'done') {
-        const endRegex = /(\|\s*完工時間\s*\|\s*)([^\|]+)(\|)/;
+        const endRegex = /(\|\s*完工時間\s*\|\s*)([^|]+)(\|)/;
         if (endRegex.test(content)) {
           content = content.replace(endRegex, `$1${now} $3`);
         }
