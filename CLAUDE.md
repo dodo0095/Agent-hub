@@ -3,6 +3,15 @@
 > 本文件是地圖，不是百科全書。詳細規範見索引指向的 .knowledge/ 文件。
 > **所有 Agent 執行任務前必須先閱讀本文件，再依索引查閱對應文件。**
 
+
+## 執行環境
+- OS: Windows 11，無 WSL
+- Shell: bash (Git Bash)，但 cmd.exe、python3、findstr、PowerShell 都不可用
+- Python: C:\Users\Bandai\anaconda3\python.exe（Anaconda）
+- Node.js: C:\Program Files\nodejs\node.exe
+- 所有 Python 指令請用完整路徑或直接 `python`（不是 python3）
+- 不要使用 findstr，改用 grep
+
 ---
 
 ## 專案簡介
