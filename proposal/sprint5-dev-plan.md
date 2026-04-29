@@ -404,12 +404,12 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 
 | 任務 | 完成日期 | 結果 | 備註 |
 |------|---------|------|------|
-| T1 | | | |
-| T2 | | | |
-| T3 | | | |
-| T4 | | | |
-| T5 | | | |
-| T6 | | | |
+| T1 | 2026-04-29 | ✅ done | 設計在 dev-plan §2、§5 已完整記錄，老闆確認無調整意見 |
+| T2 | — | 🔄 in_review | backend-architect 完成；等 T5/T6 後進 G2 |
+| T3 | — | 🔄 in_review | backend-architect 完成；dev 路徑已對齊 out/mcp/ |
+| T4 | — | 🔄 in_review | backend-architect 確認三欄位正確解析，新增 getAgent() alias |
+| T5 | — | 🔄 in_progress | backend-architect 執行中（T2 解鎖）|
+| T6 | — | 🔄 in_progress | backend-architect 執行中（T2 解鎖）|
 | T7 | | | |
 | T8 | | | |
 | T9 | | | |
@@ -422,8 +422,8 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 
 | Review 步驟 | 日期 | 結果 | Review 文件連結 |
 |------------|------|------|---------------|
-| 設計 Review（T1）| | | |
-| 實作 Review（T2~T6）| | | |
+| 設計 Review（T1）| 2026-04-29 | ✅ 通過 | 設計文件完整，老闆確認無調整 |
+| 實作 Review（T2~T6）| — | ⏳ 等待 T5/T6 完成 | T2/T3/T4 in_review，T5/T6 in_progress |
 | 測試 Review（T8~T10）| | | |
 | 文件 Review（T12）| | | |
 
