@@ -133,9 +133,9 @@
   ```
 - **歷史證據**: 早於這次的 reflog 也都是同樣 pattern，每次多開 session 都在 race，只是 commit 落錯分支沒人發現
 - **根因**: 設計假設「每個 session 一個 agent，agent 用自己分支隔離」，但實作層面所有 session **共享同一個 working tree**，HEAD 是 process-wide 的單一狀態
-- **修復路線（待老闆批示）**:
+- **修復路線（已決）**:
   - **A 短期**：移除 `tryAutoBranch()` 從 spawn，改 GUI 手動觸發（0.5 day）
-  - **B 中期**：改用 `git worktree add` 每 session 獨立 worktree（2-3 day，根治）
+  - **✅ B 中期（老闆選定，2026-04-29）**：改用 `git worktree add` 每 session 獨立 worktree（2-3 day，根治）
   - **C 暫補**：file lock 偵測其他 session active 時跳過（治標不治本）
 - **暫時迴避**: PM 做完工作後**手動 `git checkout main` + `merge --ff-only`** 救回正確分支，再 push
 - **預防**:
