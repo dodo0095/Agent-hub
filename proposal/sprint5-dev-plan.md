@@ -405,12 +405,12 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 | 任務 | 完成日期 | 結果 | 備註 |
 |------|---------|------|------|
 | T1 | 2026-04-29 | ✅ done | 設計在 dev-plan §2、§5 已完整記錄，老闆確認無調整意見 |
-| T2 | — | 🔄 in_review | backend-architect 完成；等 T5/T6 後進 G2 |
-| T3 | — | 🔄 in_review | backend-architect 完成；dev 路徑已對齊 out/mcp/ |
-| T4 | — | 🔄 in_review | backend-architect 確認三欄位正確解析，新增 getAgent() alias |
-| T5 | — | 🔄 in_progress | backend-architect 執行中（T2 解鎖）|
-| T6 | — | 🔄 in_progress | backend-architect 執行中（T2 解鎖）|
-| T7 | | | |
+| T2 | 2026-04-29 | ✅ done | G2 通過；send-message-server.ts 零 Electron import，8 TC 全過 |
+| T3 | 2026-04-29 | ✅ done | G2 通過；getMcpServerPath() dev/packaged 雙模式，graceful degradation 到位 |
+| T4 | 2026-04-29 | ✅ done | G2 通過；三欄位 fallback 正確，getAgent() alias 新增 |
+| T5 | 2026-04-29 | ✅ done | G2 通過；6 TC 全過，MCP_TOOL_NAMES 常數驅動，防退化有效 |
+| T6 | 2026-04-29 | ✅ done | G2 通過；8 TC 全過，tmpdir 隔離，純 Node.js |
+| T7 | 2026-04-29 | ✅ done | G2 Review：0 Blocker / 0 Major / 3 Minor（記錄在案）|
 | T8 | | | |
 | T9 | | | |
 | T10 | | | |
@@ -423,7 +423,7 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 | Review 步驟 | 日期 | 結果 | Review 文件連結 |
 |------------|------|------|---------------|
 | 設計 Review（T1）| 2026-04-29 | ✅ 通過 | 設計文件完整，老闆確認無調整 |
-| 實作 Review（T2~T6）| — | ⏳ 等待 T5/T6 完成 | T2/T3/T4 in_review，T5/T6 in_progress |
+| 實作 Review（T2~T6）| 2026-04-29 | 通過 | Blocker:0 Major:0 Minor:3 — type duplication(M1), reply_to 靜默忽略(M2), list_inbox 未宣告(M3)；Minor 於 T12 處理 |
 | 測試 Review（T8~T10）| | | |
 | 文件 Review（T12）| | | |
 
