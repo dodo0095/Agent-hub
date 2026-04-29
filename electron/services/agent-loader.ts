@@ -262,6 +262,11 @@ class AgentLoader {
     return this.agents.get(id);
   }
 
+  /** Alias for getById — used by session-spawn-helpers for MCP config injection. */
+  getAgent(id: string): AgentDefinition | undefined {
+    return this.agents.get(id);
+  }
+
   getSystemPrompt(id: string): string {
     const agent = this.agents.get(id);
     if (!agent) return '';

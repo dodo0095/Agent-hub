@@ -5,3 +5,4 @@ export * from './task';
 export * from './project';
 export * from './gate';
 export * from './git';
+export * from './mcp';

@@ -17,5 +17,8 @@
   },
   "include": [
     "electron/**/*.ts"
+  ],
+  "exclude": [
+    "electron/mcp/**"
   ]
 }

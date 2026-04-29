@@ -5,11 +5,13 @@
  */
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { homedir } from 'os';
 import { app } from 'electron';
 import { database } from './database';
 import { promptAssembler } from './prompt-assembler';
+import { agentLoader } from './agent-loader';
 import { logger } from '../utils/logger';
-import type { SpawnParams } from '../types';
+import type { SpawnParams, AgentMcpConfig, McpServerConfig } from '../types';
 
 /** Resolve path to the statusline Node.js script (works in both dev and packaged). */
 function getStatuslineScriptPath(): string {
@@ -17,6 +19,18 @@ function getStatuslineScriptPath(): string {
     return join(process.resourcesPath, 'session-statusline.js');
   }
   return join(__dirname, '..', '..', 'electron', 'utils', 'session-statusline.js');
+}
+
+/**
+ * Resolve path to the MCP send-message server script.
+ * Dev:       out/mcp/send-message-server.js  (compiled from electron/mcp/)
+ * Packaged:  <resourcesPath>/send-message-server.js
+ */
+function getMcpServerPath(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'send-message-server.js');
+  }
+  return join(__dirname, '..', 'mcp', 'send-message-server.js');
 }
 
 // ─── CLI argument builder ────────────────────────────────────────────────────
@@ -152,6 +166,59 @@ export function buildClaudeArgs(
     } else {
       logger.warn(`Statusline script not found at ${statuslineScript}, cost tracking disabled`);
     }
+  }
+
+  // ── MCP inter-agent communication injection ──────────────────────────────
+  // Inject --mcp-config so Claude Code CLI exposes SendMessage / ListInbox tools.
+  // Only for normal (non-resume) spawns — resume sessions inherit the original
+  // session's MCP config automatically.
+  try {
+    const agentDef = agentLoader.getAgent(params.agentId);
+    if (agentDef) {
+      const allowedTargets = [
+        ...(agentDef.manages ?? []),
+        ...(agentDef.reportsTo ? [agentDef.reportsTo] : []),
+        ...(agentDef.coordinatesWith ?? []),
+      ];
+
+      const mcpAgentConfig: AgentMcpConfig = {
+        agentId: params.agentId,
+        allowedTargets,
+        inboxDir: join(homedir(), '.claude', 'teams', 'default', 'inboxes'),
+        projectId: params.projectId || null,
+        rateLimit: 20,
+      };
+
+      const mcpAgentConfigPath = join(promptDir, `mcp-agent-config-${sessionId.slice(0, 8)}.json`);
+      writeFileSync(mcpAgentConfigPath, JSON.stringify(mcpAgentConfig, null, 2), 'utf-8');
+
+      const serverScriptPath = getMcpServerPath();
+      if (existsSync(serverScriptPath)) {
+        const mcpServersConfig: McpServerConfig = {
+          mcpServers: {
+            'send-message': {
+              command: 'node',
+              args: [serverScriptPath, mcpAgentConfigPath],
+              type: 'stdio',
+            },
+          },
+        };
+        const mcpServersConfigPath = join(promptDir, `mcp-servers-${sessionId.slice(0, 8)}.json`);
+        writeFileSync(mcpServersConfigPath, JSON.stringify(mcpServersConfig), 'utf-8');
+        args.push('--mcp-config', mcpServersConfigPath);
+        logger.info(
+          `Session ${sessionId} MCP server injected` +
+            ` (${params.agentId} → ${allowedTargets.length} targets: ${allowedTargets.join(', ')})`,
+        );
+      } else {
+        logger.warn(
+          `MCP server script not found at ${serverScriptPath}, SendMessage unavailable for session ${sessionId}`,
+        );
+      }
+    }
+  } catch (err) {
+    // MCP injection failure must not block session spawn (graceful degradation)
+    logger.warn(`Failed to inject MCP config for session ${sessionId}: ${err}`);
   }
 
   return { args, tmpFile };

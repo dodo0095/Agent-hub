@@ -123,6 +123,29 @@
 
 > 注意：`initI18n()` 須在 `database.initialize()` 之後、`Menu.buildFromTemplate()` 之前呼叫。Main process 不使用 vue-i18n，僅使用本 helper。
 
+### Sprint 5 新增：MCP 跨 Agent 通訊層（T2/T3/T4）
+
+| 項目 | 檔案 | 說明 |
+|------|------|------|
+| MCP Server | `electron/mcp/send-message-server.ts` → `out/mcp/send-message-server.js` | 獨立 CommonJS Node.js 腳本，**禁止 Electron import**。由 Claude Code CLI spawn 為 stdio 子程序 |
+| MCP 型別 | `electron/types/mcp.ts` | `AgentMcpConfig`、`McpServerConfig` 型別定義 |
+| Spawn 注入 | `electron/services/session-spawn-helpers.ts` | `getMcpServerPath()` + `buildClaudeArgs()` 注入 `--mcp-config` |
+
+**設計決策**：
+- **白名單**：`manages ∪ {reportsTo} ∪ coordinatesWith`（三欄位聯集）
+- **Rate Limit**：20 條/session/小時，in-memory，session 結束自動重置
+- **Inbox 格式**：`~/.claude/teams/default/inboxes/{agentId}.json`（JSON array）
+- **Graceful Degradation**：MCP server 不存在時 warn log，session 不中斷
+- **Resume 路徑**：不重新注入，沿用原 session 設定
+- **編譯設定**：`tsconfig.mcp.json`（CommonJS / ES2020），排除在主 tsconfig 之外
+
+**`AgentMcpConfig` 欄位**：
+```typescript
+{ agentId, allowedTargets, inboxDir, projectId, rateLimit }
+```
+
+**AgentLoader 新增 `getAgent()` 方法**：`getById()` 的 alias，供 spawn-helpers 呼叫。
+
 ## 已移除服務
 
 | 服務 | 原因 |

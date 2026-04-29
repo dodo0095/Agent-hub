@@ -20,6 +20,7 @@ test-results/
 !.claude/settings.json
 docs/*
 !docs/screenshots/
+!docs/*.docx
 .tasks/
 
 # Sprint 4 — academic-research 部門產出物（未發表論文、國科會計畫書草稿）
