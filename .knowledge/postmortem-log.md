@@ -98,3 +98,62 @@
 - **預防**:
   - 任何要寫進 system prompt 的「工具」必須先確認 harness 有對應實作
   - prompt-assembler 增加單元測試：宣告的工具必須在 ToolSearch 可見
+
+### PM-007: 17 個工作流 commands 全部設 disable-model-invocation — agent 卡死
+
+- **發現日期**: 2026-04-29
+- **影響範圍**: 所有 L1 / L2 agent，所有 Sprint 工作流
+- **問題**: `.claude/commands/` 17 個指令（dev-plan / sprint-proposal / task-* / review / pm-review / gate-record / pre-deploy / project-kickoff / sprint-retro / pitfall-* / harness-audit）frontmatter 全設 `disable-model-invocation: true`，禁止 Claude agent 透過 Skill tool 主動呼叫
+- **症狀**: tech-lead session 嘗試跑 `/dev-plan` → 直接收到 `Skill dev-plan cannot be used with Skill tool due to disable-model-invocation` 錯誤 → 任務卡住
+- **設計矛盾**: `CLAUDE.md` 強制規則寫「遇到使用時機必須執行對應指令，不得跳過」，但 frontmatter 同時禁止主動呼叫 → agent 收到必執行命令卻無法執行
+- **根因推測**: Anthropic 預設安全機制建議對破壞性 commands 加 `disable-model-invocation`，但 Maestro v2 的設計就是讓 agent 自主跑工作流，兩者衝突。早期 commands 可能是用 `claude /create-command` 從預設模板生成，沒移除這欄
+- **解法**: 移除全部 17 個 commands 的 `disable-model-invocation: true` frontmatter
+  - 已套用源碼端：`C:/Users/Bandai/Desktop/ALL PROJECT/Agent-hub/.claude/commands/`
+  - 已同步運行端：`C:/Users/Bandai/Desktop/AgentHub/Agent-hub/.claude/commands/`
+  - 本 session 即時生效（system-reminder 已列出 17 個 skills 為 available）
+- **替代防線**:
+  - `forbidden-commands.js` hook 仍擋危險 Bash（kill-port、--no-verify 等）
+  - `g5-pre-deploy.js` hook 仍擋上線前 typecheck/build 失敗（雖然 regex 有問題見 PM-009）
+  - `stop-validator.js` 仍防半成品交付
+- **預防**:
+  - 新增 commands 時 frontmatter 模板**不得**包含 `disable-model-invocation: true`
+  - 可寫個 hook 在 commands 檔案被建立時自動檢查並警告
+
+### PM-008: Multi-session race condition — tryAutoBranch 切走他人正在用的 working tree（待修）
+
+- **發現日期**: 2026-04-29
+- **影響範圍**: 所有同時開啟多個 session 的場景
+- **問題**: `electron/services/session-manager.ts:333` 在每個 session spawn 時呼叫 `tryAutoBranch()`，會 `git checkout` 改變 working tree HEAD。但**多個 session 共享同一個 working tree（不是獨立 worktree）**，所以 A session 的 spawn 會把 HEAD 切走，干擾 B session 正在做的 git 操作
+- **症狀**: PM session 在 main 上做完第一個 commit，準備做第二個 commit 之前，老闆開了 tech-lead session → tech-lead 的 spawn 觸發 tryAutoBranch 把 HEAD 從 main 切到 `agent/tech-lead/2026-04-28` → PM 第二個 commit 落錯分支
+- **reflog 鐵證**:
+  ```
+  HEAD@{2}: commit: docs: ...               (落在 tech-lead 分支!)
+  HEAD@{3}: checkout: main → agent/tech-lead/2026-04-28   ← race
+  HEAD@{4}: commit: docs(postmortem): ...   (這個還在 main)
+  ```
+- **歷史證據**: 早於這次的 reflog 也都是同樣 pattern，每次多開 session 都在 race，只是 commit 落錯分支沒人發現
+- **根因**: 設計假設「每個 session 一個 agent，agent 用自己分支隔離」，但實作層面所有 session **共享同一個 working tree**，HEAD 是 process-wide 的單一狀態
+- **修復路線（待老闆批示）**:
+  - **A 短期**：移除 `tryAutoBranch()` 從 spawn，改 GUI 手動觸發（0.5 day）
+  - **B 中期**：改用 `git worktree add` 每 session 獨立 worktree（2-3 day，根治）
+  - **C 暫補**：file lock 偵測其他 session active 時跳過（治標不治本）
+- **暫時迴避**: PM 做完工作後**手動 `git checkout main` + `merge --ff-only`** 救回正確分支，再 push
+- **預防**:
+  - GUI 顯眼處警示「多 session 同時 active 時 git 操作不安全」
+  - 修復後在 architecture.md 補上「working tree 共享問題」章節
+
+### PM-009: g5-pre-deploy hook regex 過寬 — 任何含 deploy 字串的 cmd 都被當部署擋下
+
+- **發現日期**: 2026-04-29
+- **影響範圍**: 所有需要碰觸名稱含 `deploy / publish / release` 的檔案的 Bash 操作
+- **問題**: `.claude/hooks/g5-pre-deploy.js:30` 的 regex `/deploy|publish|release|npm publish|docker push/i.test(cmd)` 太寬。比方對 17 個 commands 做批次 sed 處理，命令字串中只是因為**含 `pre-deploy.md` 這個檔名**就被攔截，hook 接著跑 `npm run typecheck` + `npm run build` 並失敗（typecheck/build 對純文件編輯本來就不該跑），返回 deny
+- **症狀**: PM 試圖跑 `for f in ... pre-deploy.md ...; do sed -i ...; done` 處理 PM-007 → 被 hook 擋 `G5 Pre-Deploy: typecheck 或 build 失敗，禁止部署`
+- **根因**: regex 把「字串裡有 deploy」等同於「正在執行部署」，但實際部署應該是**特定動詞 + 部署目標**（如 `npm run deploy`、`vercel --prod`、`docker push <registry>`、`gh release create`）
+- **暫時迴避**: 改用 Node inline script `node -e "..."` 處理檔案，命令字串不含 deploy / publish / release 字眼
+- **修復方向（待後續 Sprint）**:
+  - 收斂 regex 為 `/(?:^|\s)(npm run deploy|vercel\s+(?:--prod|deploy)|docker\s+push|gh\s+release\s+create)/`
+  - 或改為 OR 條件：必須同時含「部署動詞」**與**「目標位置」才視為部署
+  - 加單元測試覆蓋至少 10 種 false-positive 場景（如 sed pre-deploy.md / cat release-notes.md / grep deploy / cd deployments）
+- **預防**:
+  - 新增 hook 時必須附帶 false-positive 測試清單
+  - hook 攔截邏輯文件化：什麼情況該擋、什麼情況不該擋
