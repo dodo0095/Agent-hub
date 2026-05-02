@@ -373,7 +373,19 @@ class SessionManager {
       if (!interactive) eventParser.feed(data);
 
       if (interactive) {
-        parseInteractiveTokenUsage(session, data);
+        const usageUpdated = parseInteractiveTokenUsage(session, data);
+        if (usageUpdated) {
+          eventBus.emitSessionEvent({
+            sessionId,
+            type: 'system',
+            subtype: 'usage_update',
+            costUsd: session.costUsd,
+            inputTokens: session.inputTokens,
+            outputTokens: session.outputTokens,
+            durationMs: Date.now() - new Date(session.startedAt).getTime(),
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         if (session.status !== 'summarizing') {
           if (session.idleTimer) clearTimeout(session.idleTimer);
@@ -707,8 +719,18 @@ class SessionManager {
         if (data.inputTokens > session.inputTokens) { session.inputTokens = data.inputTokens; updated = true; }
         if (data.outputTokens > session.outputTokens) { session.outputTokens = data.outputTokens; updated = true; }
         if (updated) {
-          eventBus.emitSessionStatus({
-            sessionId, status: session.status, agentId: session.agentId,
+          // Emit a session event so the frontend can update cost/token display.
+          // emitSessionStatus only carries `status`, not cost/token data,
+          // so we use emitSessionEvent here to push the full usage snapshot.
+          eventBus.emitSessionEvent({
+            sessionId,
+            type: 'system',
+            subtype: 'usage_update',
+            costUsd: session.costUsd,
+            inputTokens: session.inputTokens,
+            outputTokens: session.outputTokens,
+            durationMs: Date.now() - new Date(session.startedAt).getTime(),
+            timestamp: new Date().toISOString(),
           });
         }
       } catch {
