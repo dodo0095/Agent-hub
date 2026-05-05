@@ -28,6 +28,7 @@ import {
 import { scanResumableSessions } from './session-conversation-scanner';
 import {
   buildClaudeArgs,
+  ensureWorkspaceTrust,
   lookupResumeInfo,
   resolveSpawnCwd,
 } from './session-spawn-helpers';
@@ -235,6 +236,11 @@ class SessionManager {
     // Resolve working directory
     const spawnCwd = resolveSpawnCwd(params, isResume, isDirectResume, resumeInfo);
     logger.info(`Session ${sessionId} working directory: ${spawnCwd}`);
+
+    // Auto-accept workspace trust so Claude Code's statusLine command can run
+    // (required since v2.1.51, otherwise cost/token tracking is silently disabled).
+    // See `ensureWorkspaceTrust` for full rationale.
+    ensureWorkspaceTrust(spawnCwd);
 
     hookManager.tryInjectHooks(spawnCwd);
     hookManager.watchHookLogs(spawnCwd);

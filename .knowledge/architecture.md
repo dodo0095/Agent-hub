@@ -33,6 +33,7 @@
 | 服務 | 檔案 | 職責 |
 |------|------|------|
 | SessionManager | `session-manager.ts` | Session 生命週期、PTY 管理、輸出緩衝、Cost Tracking |
+| SessionSpawnHelpers | `session-spawn-helpers.ts` | spawn 純函式：CLI 參數組裝、cwd 解析、**workspace trust 自動接受** |
 | SessionCostTracker | `session-cost-tracker.ts` | Token/cost 解析（PTY 文字 + statusLine 檔案輪詢）|
 | Database | `database.ts` | sql.js 初始化、migration、CRUD |
 | AgentLoader | `agent-loader.ts` | 載入 Agent YAML 定義 |
@@ -145,6 +146,24 @@
 ```
 
 **AgentLoader 新增 `getAgent()` 方法**：`getById()` 的 alias，供 spawn-helpers 呼叫。
+
+### Workspace Trust 自動接受（Cost Tracking 必要前提）
+
+| 項目 | 檔案 | 說明 |
+|------|------|------|
+| `ensureWorkspaceTrust(cwd)` | `electron/services/session-spawn-helpers.ts` | spawn 前寫入 `~/.claude.json`，把 cwd 標為 `hasTrustDialogAccepted: true` |
+
+**背景**：Claude Code v2.1.51 引入安全限制——互動模式下 `statusLine` / `fileSuggestion` hook 命令需 workspace trust 才執行。AgentHub 的 cost tracking 依賴 statusLine 寫入 `.maestro-usage/<sessionId>.json`，若 cwd 未被 trust，整條鏈路斷掉，session.costUsd 永遠 = 0。
+
+**設計決策**：AgentHub 是受控環境（老闆親自 spawn），等同於使用者已點擊「trust this workspace」。spawn 前自動將該 cwd 寫為 trusted，是最小改動的可行解。
+
+**行為要求**：
+- Idempotent：已 trust 則 no-op
+- Non-blocking：寫入失敗只 warn log，不中斷 spawn
+- 路徑規範化：Windows `\\` → `/`（Claude Code 內部以 forward slash 為 key）
+- 只動 `hasTrustDialogAccepted` 欄位，其他欄位保持不動（避免破壞 user 累積資料）
+
+> 踩坑紀錄：見 `postmortem-log.md` 之 PM-010（statusLine 因 trust 未接受而失效，導致 28 筆 sessions cost = $0）。
 
 ## 已移除服務
 

@@ -157,3 +157,29 @@
 - **預防**:
   - 新增 hook 時必須附帶 false-positive 測試清單
   - hook 攔截邏輯文件化：什麼情況該擋、什麼情況不該擋
+
+### PM-010: PM-004/PM-005 修復後仍歸零 — Claude Code v2.1.51 安全機制擋住 statusLine
+
+- **發現日期**: 2026-05-04
+- **影響期間**: 2026-04-17 至 2026-05-04（共 17 天，28 個 session cost = $0；累積 ~25 USD 真實開銷無紀錄）
+- **問題**: Dashboard 30 日用量自 4/17 後完全停止累計，每個 session 也都 cost = 0；前兩次修復（PM-004 env var + PM-005 全域覆寫）皆未根治
+- **症狀**:
+  - DB `claude_sessions` 最後一筆有 cost 的 session 是 `2026-04-17 13:33`
+  - `.maestro-usage/` 完全空目錄（statusLine 從未寫入）
+  - `.maestro-prompts/settings-*.json` 都正確產生（含 usage file path 參數）
+  - 手動執行 `node session-statusline.js <path>` 並餵 stdin 是正常寫入的（script 沒問題）
+  - Session log 也找不到 `tok: ` / `$0.` 等 statusLine 應該輸出的字串
+- **根因**: Claude Code v2.1.51 引入安全修復——「`statusLine` and `fileSuggestion` hook commands could execute without workspace trust acceptance in interactive mode」。互動模式下，cwd 在 `~/.claude.json` 中 `hasTrustDialogAccepted` 不為 true 時，statusLine command **完全不執行**（連 subprocess 都不 spawn）。AgentHub 為各專案 spawn 的 cwd（如 `Agent-hub`、`StarkLab` 等）都 `hasTrustDialogAccepted: false` → statusLine silent skip → usage file 永不寫入 → cost 永遠 = 0。v2.1.80 雖然修了「statusLine 顯示 nothing」UI bug，但底層命令仍受 trust 控制
+- **觸發時機**: Claude Code 升版到 ≥ 2.1.51（user 約在 4/17 升級）
+- **解法**:
+  1. `electron/services/session-spawn-helpers.ts` 新增 `ensureWorkspaceTrust(cwd)` 函式：在 spawn 前讀寫 `~/.claude.json`，把目標 cwd 標為 `hasTrustDialogAccepted: true`
+  2. `session-manager.ts` 在 `resolveSpawnCwd()` 之後立刻呼叫
+  3. Idempotent：已 trust 則 no-op；non-blocking：寫入失敗只 warn log
+  4. 路徑規範化：Windows `\\` → `/`（Claude Code 內部 key 格式）
+- **驗證**:
+  - 8 個單元測試（`tests/services/session-spawn-helpers.test.ts`）涵蓋首次 trust、idempotent、空 projects 欄位、malformed JSON、寫入失敗、路徑規範化
+  - 真機 spawn 一個 session → 確認 `.maestro-usage/<sid>.json` 有寫入 → DB `cost_usd > 0`
+- **預防**:
+  - **上游版本變更監控**：Claude Code changelog 中與 statusLine / hooks / settings 相關的 security fix 必須當下評估對 AgentHub 的影響
+  - **避免假修復**：PM-004 與 PM-005 都鎖定在 env var / 全域覆寫，沒有從「為什麼 statusLine subprocess 根本沒被 spawn」這個更上游的問題去查；下次調查 statusLine 失效務必先驗證 subprocess 是否被執行（log strace / 手動跑 + 比對 PTY 輸出是否含 `tok: `）
+  - **工具**：考慮在 spawn 時 log Claude Code 版本，方便日後追溯哪一版開始問題
