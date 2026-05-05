@@ -3,7 +3,7 @@
  * These are module-level functions (not class methods) so they can be tested
  * independently and do not bloat the SessionManager class body.
  */
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { app } from 'electron';
@@ -248,6 +248,62 @@ export function lookupResumeInfo(isResume: boolean, resumeSessionId?: string): R
     logger.warn('Failed to look up original session for resume', err);
   }
   return {};
+}
+
+// ─── Workspace trust auto-acceptance ─────────────────────────────────────────
+
+/**
+ * Ensure a workspace is marked as trusted in Claude Code's user config
+ * (`~/.claude.json`).
+ *
+ * Background — Claude Code v2.1.51 introduced a security fix: in interactive
+ * mode, `statusLine` and `fileSuggestion` hook commands are gated by workspace
+ * trust acceptance. Without trust, the statusLine subprocess never runs, so
+ * our `.maestro-usage/<sessionId>.json` file is never written, and
+ * `session.costUsd` stays at 0 → the dashboard's 30-day cost shows nothing.
+ *
+ * AgentHub spawns sessions on the boss's behalf into work directories the
+ * boss has already authorised through the AgentHub UI (creating a project =
+ * implicit trust). We treat any cwd we spawn into as already trusted —
+ * equivalent to clicking "trust this workspace" in the dialog.
+ *
+ * Behaviour:
+ * - Idempotent: no-op when the cwd is already trusted.
+ * - Non-blocking: failures are logged and swallowed so they never abort spawn.
+ * - Path normalisation: Claude Code stores keys with forward slashes on
+ *   Windows, so we normalise `\\` → `/` before lookup/write.
+ */
+export function ensureWorkspaceTrust(cwd: string): void {
+  try {
+    const claudeJsonPath = join(homedir(), '.claude.json');
+    if (!existsSync(claudeJsonPath)) {
+      // First-time Claude Code user — config file not yet created. Claude
+      // Code will write it on its own first run; nothing to do here.
+      return;
+    }
+
+    const raw = readFileSync(claudeJsonPath, 'utf-8');
+    const config = JSON.parse(raw) as { projects?: Record<string, { hasTrustDialogAccepted?: boolean }> };
+    config.projects = config.projects || {};
+
+    const normalized = cwd.replace(/\\/g, '/');
+    const existing = config.projects[normalized];
+    if (existing && existing.hasTrustDialogAccepted === true) {
+      return; // already trusted — nothing to do
+    }
+
+    config.projects[normalized] = {
+      ...(existing || {}),
+      hasTrustDialogAccepted: true,
+    };
+
+    writeFileSync(claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8');
+    logger.info(`Auto-trusted workspace for statusLine cost tracking: ${normalized}`);
+  } catch (err) {
+    // Trust write failure must never block session spawn — degrade
+    // gracefully (cost tracking will simply not work for this session).
+    logger.warn('Failed to auto-trust workspace (statusLine cost tracking may be disabled)', err);
+  }
 }
 
 // ─── Working directory resolution ────────────────────────────────────────────

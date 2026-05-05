@@ -25,9 +25,11 @@ import {
   applyResultEventUsage,
   persistSessionCost,
 } from './session-cost-tracker';
+import { parseJsonlUsage } from './jsonl-usage-tracker';
 import { scanResumableSessions } from './session-conversation-scanner';
 import {
   buildClaudeArgs,
+  ensureWorkspaceTrust,
   lookupResumeInfo,
   resolveSpawnCwd,
 } from './session-spawn-helpers';
@@ -235,6 +237,11 @@ class SessionManager {
     // Resolve working directory
     const spawnCwd = resolveSpawnCwd(params, isResume, isDirectResume, resumeInfo);
     logger.info(`Session ${sessionId} working directory: ${spawnCwd}`);
+
+    // Auto-accept workspace trust so Claude Code's statusLine command can run
+    // (required since v2.1.51, otherwise cost/token tracking is silently disabled).
+    // See `ensureWorkspaceTrust` for full rationale.
+    ensureWorkspaceTrust(spawnCwd);
 
     hookManager.tryInjectHooks(spawnCwd);
     hookManager.watchHookLogs(spawnCwd);
@@ -747,11 +754,78 @@ class SessionManager {
       clearInterval(poller);
       this.usagePollers.delete(sessionId);
     }
+    // Stop JSONL polling too (started by captureClaudeConversationId)
+    const jsonlPoller = this.jsonlPollers.get(sessionId);
+    if (jsonlPoller) {
+      clearInterval(jsonlPoller);
+      this.jsonlPollers.delete(sessionId);
+    }
     // Clean up usage file
     try {
       const usageFile = join(process.cwd(), '.maestro-usage', `${sessionId}.json`);
       if (existsSync(usageFile)) unlinkSync(usageFile);
     } catch { /* ignore */ }
+  }
+
+  // ─── JSONL-based usage polling (canonical source of truth) ────────────────
+  //
+  // statusLine subprocess execution is unreliable on Windows + v2.1.114:
+  //   1. v2.1.51 added workspace-trust gating — without trust, statusLine never runs.
+  //   2. The `--settings <file>` flag's content is merged for permissions but the
+  //      statusLine field is silently dropped (verified via --debug-file).
+  //
+  // Claude Code itself writes a per-conversation JSONL log to
+  // ~/.claude/projects/<encoded-cwd>/<conv-id>.jsonl with exact `usage` data on
+  // every assistant turn. Reading that file is the authoritative way to track
+  // cost. We start this poll once captureClaudeConversationId() has identified
+  // which JSONL file belongs to this session.
+  //
+  // Both the statusLine-file poll and this JSONL poll feed into the same
+  // session.{costUsd,inputTokens,outputTokens} fields using max-wins merging,
+  // so JSONL wins when statusLine is broken (the common case).
+
+  private jsonlPollers = new Map<string, ReturnType<typeof setInterval>>();
+
+  private startJsonlUsagePolling(sessionId: string, jsonlPath: string): void {
+    // Stop any prior poller (defensive — should not happen in normal flow)
+    const existing = this.jsonlPollers.get(sessionId);
+    if (existing) clearInterval(existing);
+
+    const poller = setInterval(() => {
+      const session = this.sessions.get(sessionId);
+      if (!session || ['completed', 'failed', 'stopped'].includes(session.status)) {
+        clearInterval(poller);
+        this.jsonlPollers.delete(sessionId);
+        return;
+      }
+      try {
+        const usage = parseJsonlUsage(jsonlPath);
+        let updated = false;
+        // Max-wins merge: JSONL data is monotonically increasing, but the
+        // statusLine path may have written a different snapshot. Take the
+        // larger of the two so we never regress.
+        if (usage.costUsd > session.costUsd) { session.costUsd = usage.costUsd; updated = true; }
+        if (usage.inputTokens > session.inputTokens) { session.inputTokens = usage.inputTokens; updated = true; }
+        if (usage.outputTokens > session.outputTokens) { session.outputTokens = usage.outputTokens; updated = true; }
+        if (updated) {
+          eventBus.emitSessionEvent({
+            sessionId,
+            type: 'system',
+            subtype: 'usage_update',
+            costUsd: session.costUsd,
+            inputTokens: session.inputTokens,
+            outputTokens: session.outputTokens,
+            durationMs: Date.now() - new Date(session.startedAt).getTime(),
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        logger.warn(`JSONL usage poll failed for ${sessionId}`, err);
+      }
+    }, 5000);
+
+    this.jsonlPollers.set(sessionId, poller);
+    logger.info(`Started JSONL usage polling for session ${sessionId} (${jsonlPath})`);
   }
 
   private pendingFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -931,6 +1005,14 @@ class SessionManager {
           catch (err) { logger.warn('Failed to save claude_conversation_id', err); }
           logger.info(`Captured Claude conversation ID ${convId} for session ${sessionId}`);
           clearInterval(timer);
+
+          // Start JSONL-based usage tracking now that we know which file to read.
+          // This is more reliable than statusLine because Claude itself writes the
+          // JSONL on every assistant turn; statusLine subprocess execution is
+          // gated by workspace trust + only honoured from user/project settings,
+          // not from the per-session `--settings` flag (v2.1.114 behaviour).
+          const jsonlPath = join(convDir, best.file);
+          this.startJsonlUsagePolling(sessionId, jsonlPath);
         }
       } catch (err) { logger.warn('Error during conversation ID capture', err); }
     }, 2000);

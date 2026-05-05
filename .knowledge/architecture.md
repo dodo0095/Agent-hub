@@ -1,7 +1,7 @@
 # 系統架構
 
-> **版本**: v1.2
-> **最後更新**: 2026-03-25
+> **版本**: v1.3
+> **最後更新**: 2026-05-05
 
 ---
 
@@ -33,7 +33,9 @@
 | 服務 | 檔案 | 職責 |
 |------|------|------|
 | SessionManager | `session-manager.ts` | Session 生命週期、PTY 管理、輸出緩衝、Cost Tracking |
-| SessionCostTracker | `session-cost-tracker.ts` | Token/cost 解析（PTY 文字 + statusLine 檔案輪詢）|
+| SessionSpawnHelpers | `session-spawn-helpers.ts` | spawn 純函式：CLI 參數組裝、cwd 解析、**workspace trust 自動接受** |
+| SessionCostTracker | `session-cost-tracker.ts` | Token/cost 解析（PTY 文字 + statusLine 檔案輪詢，於 v2.1.114 已不可靠，保留為 fallback） |
+| JsonlUsageTracker | `jsonl-usage-tracker.ts` | **權威 cost 來源**：解析 Claude Code 的 conversation JSONL（`~/.claude/projects/<encoded-cwd>/<conv-id>.jsonl`），逐 turn 累加 token 並用模型定價計算 cost。支援 5m/1h cache 區分、跨模型 session、prefix/family fallback |
 | Database | `database.ts` | sql.js 初始化、migration、CRUD |
 | AgentLoader | `agent-loader.ts` | 載入 Agent YAML 定義 |
 | PromptAssembler | `prompt-assembler.ts` | 組裝 System Prompt |
@@ -145,6 +147,39 @@
 ```
 
 **AgentLoader 新增 `getAgent()` 方法**：`getById()` 的 alias，供 spawn-helpers 呼叫。
+
+### Cost Tracking 雙軌制（JSONL 主 / statusLine fallback）
+
+| 項目 | 檔案 | 說明 |
+|------|------|------|
+| `parseJsonlUsage(filePath)` | `electron/services/jsonl-usage-tracker.ts` | 從 conversation JSONL 解析 token/cost（**主要來源**） |
+| `startJsonlUsagePolling(sessionId, jsonlPath)` | `electron/services/session-manager.ts` | 在 `captureClaudeConversationId()` 取得 conv_id 後啟動，每 5s poll 一次，max-wins merge 到 session 並 emit `usage_update` 事件 |
+| `ensureWorkspaceTrust(cwd)` | `electron/services/session-spawn-helpers.ts` | spawn 前寫入 `~/.claude.json` 把 cwd 標為 `hasTrustDialogAccepted: true`（保留作為 statusLine fallback 路徑的前提） |
+| `--settings <session-file>.json` | `session-spawn-helpers.ts` `buildClaudeArgs()` | 寫入 statusLine command（**保留為 fallback；v2.1.114 實測已不會被 honor**） |
+
+**根本成因（v2.1.114 實測）**：
+1. `--settings <file>` 內含 `permissions` 與 `statusLine` 時，Claude Code 只把 `permissions` 合併進 `flagSettings` destination，**`statusLine` 欄位被靜默丟棄**。debug log 中找不到任何 `statusline-test-marker` 字樣，證明 statusLine subprocess 從未被執行。
+2. 即使 workspace trust 已自動接受（v2.1.51 gate 通過），上述 v2.1.114 的合併邏輯仍然導致 statusLine 不會啟動。
+3. 結果：session.costUsd 永遠 = 0，dashboard 30 天用量自 2026-04-17 起停滯。
+
+**新設計**：
+- Claude Code 自己會把每一輪 `assistant` 事件（含完整 `usage` 區塊）寫入 `~/.claude/projects/<encoded-cwd>/<conv-id>.jsonl`，這是 Claude 自己計費的權威來源。
+- 我們從 PTY 輸出抓到 `conv_id` 後，啟動 JSONL poller，每 5s 重算總 cost、與 session 上的舊值取 max（max-wins，避免 race / 暫態回退），有變化就 emit `usage_update` 給 renderer。
+- statusLine 流程仍保留作為 fallback —— 哪天 Anthropic 修好 `--settings` flag 的 statusLine 合併行為，這條路徑會自動恢復；在那之前以 JSONL 為準。
+
+**Pricing 表維護**：`PRICING` 常數需在新模型發表 / 定價調整時更新，目前涵蓋 sonnet-4-6/4-5/4、opus-4-1/4、haiku-4-5/3-5。Resolver 順序：exact → prefix → family fallback (`sonnet`/`opus`/`haiku`) → 預設 sonnet-4-6。
+
+**Cache 定價**：JSONL `usage.cache_creation` 內若有 `ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens` 細分則優先採用（5m=$3.75/M、1h=$6/M for sonnet）；只有 legacy `cache_creation_input_tokens` 時降級為全 5m 計算。
+
+**校準**：實測一筆真實 session（67 input / 6586 output / 118029 cc_1h / 883289 cr，sonnet-4-6）獨立計算 = $1.0722，parser 輸出 $1.0722，誤差 < 1¢。
+
+**行為要求**：
+- Idempotent：JSONL 每次重新讀取整檔重算（檔案 < 數百 KB，可接受）
+- Non-blocking：JSONL 不存在或 malformed 回傳 zeros，不拋例外
+- session 結束（completed / failed / stopped）自動清掉 poller
+- `ensureWorkspaceTrust` 仍保留所有原行為（idempotent、non-blocking、路徑規範化）
+
+> 踩坑紀錄：見 `postmortem-log.md` 之 PM-010（從 trust 限制 → `--settings` 靜默丟 statusLine 的兩階段根因）。
 
 ## 已移除服務
 
