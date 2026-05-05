@@ -158,28 +158,33 @@
   - 新增 hook 時必須附帶 false-positive 測試清單
   - hook 攔截邏輯文件化：什麼情況該擋、什麼情況不該擋
 
-### PM-010: PM-004/PM-005 修復後仍歸零 — Claude Code v2.1.51 安全機制擋住 statusLine
+### PM-010: PM-004/PM-005 修復後仍歸零 — `--settings` 旗標靜默丟棄 statusLine（兩階段根因）
 
 - **發現日期**: 2026-05-04
-- **影響期間**: 2026-04-17 至 2026-05-04（共 17 天，28 個 session cost = $0；累積 ~25 USD 真實開銷無紀錄）
-- **問題**: Dashboard 30 日用量自 4/17 後完全停止累計，每個 session 也都 cost = 0；前兩次修復（PM-004 env var + PM-005 全域覆寫）皆未根治
+- **影響期間**: 2026-04-17 至 2026-05-05（共 18 天，28+ 個 session cost = $0；累積 ~25 USD 真實開銷無紀錄）
+- **問題**: Dashboard 30 日用量自 4/17 後完全停止累計，每個 session 也都 cost = 0；前兩次修復（PM-004 env var + PM-005 全域覆寫）皆未根治；第三次嘗試（workspace trust，commit `bc55cf7`）也只解決一半
 - **症狀**:
   - DB `claude_sessions` 最後一筆有 cost 的 session 是 `2026-04-17 13:33`
   - `.maestro-usage/` 完全空目錄（statusLine 從未寫入）
   - `.maestro-prompts/settings-*.json` 都正確產生（含 usage file path 參數）
   - 手動執行 `node session-statusline.js <path>` 並餵 stdin 是正常寫入的（script 沒問題）
   - Session log 也找不到 `tok: ` / `$0.` 等 statusLine 應該輸出的字串
-- **根因**: Claude Code v2.1.51 引入安全修復——「`statusLine` and `fileSuggestion` hook commands could execute without workspace trust acceptance in interactive mode」。互動模式下，cwd 在 `~/.claude.json` 中 `hasTrustDialogAccepted` 不為 true 時，statusLine command **完全不執行**（連 subprocess 都不 spawn）。AgentHub 為各專案 spawn 的 cwd（如 `Agent-hub`、`StarkLab` 等）都 `hasTrustDialogAccepted: false` → statusLine silent skip → usage file 永不寫入 → cost 永遠 = 0。v2.1.80 雖然修了「statusLine 顯示 nothing」UI bug，但底層命令仍受 trust 控制
-- **觸發時機**: Claude Code 升版到 ≥ 2.1.51（user 約在 4/17 升級）
-- **解法**:
-  1. `electron/services/session-spawn-helpers.ts` 新增 `ensureWorkspaceTrust(cwd)` 函式：在 spawn 前讀寫 `~/.claude.json`，把目標 cwd 標為 `hasTrustDialogAccepted: true`
-  2. `session-manager.ts` 在 `resolveSpawnCwd()` 之後立刻呼叫
-  3. Idempotent：已 trust 則 no-op；non-blocking：寫入失敗只 warn log
-  4. 路徑規範化：Windows `\\` → `/`（Claude Code 內部 key 格式）
+- **根因（兩階段，必須同時克服）**:
+  1. **Stage 1（PM-010 原始假設，partially correct）**: Claude Code v2.1.51 引入「`statusLine` / `fileSuggestion` hook 需 workspace trust」的安全 gate。AgentHub 為各專案 spawn 的 cwd 都 `hasTrustDialogAccepted: false` → statusLine 被 trust gate 擋住。
+  2. **Stage 2（v2.1.114 實測新發現）**: 即使 workspace trust 已自動接受，Claude Code v2.1.114 在處理 `--settings <file>` flag 時，**只把 `permissions` 欄位合併進 `flagSettings` destination**，`statusLine` 欄位被靜默丟棄，從未被執行。debug log（`--debug --debug-file`）中找不到任何「Applying statusLine」或設定的 unique marker 字樣，但 `Applying permission update` 訊息有出現，destination = `flagSettings`。這代表 `--settings` 對 statusLine 形同無效。
+- **驗證根因的方法**: 寫了一個獨立 node script（`%TEMP%/test-claude-settings-flag.js`），用 `claude.cmd --print --debug --debug-file <log> --settings <file>` 跑一次，settings 內塞唯一 marker `UNIQUE_TEST_MARKER_FOR_SETTINGS_FLAG`（permission）和 `statusline-test-marker`（statusLine command）。debug log 找得到 permission marker，找不到 statusLine marker。
+- **觸發時機**: Claude Code 升版到 ≥ 2.1.51 開啟 trust gate；≥ 2.1.114 仍丟棄 `--settings` 內的 statusLine
+- **解法（PRIMARY，採用 JSONL 主軌）**:
+  1. 新增 `electron/services/jsonl-usage-tracker.ts`：`parseJsonlUsage(filePath)` 從 `~/.claude/projects/<encoded-cwd>/<conv-id>.jsonl` 解析每個 `assistant` 事件的 `usage` 區塊，逐 turn 用模型 pricing 累加 cost。Pricing 涵蓋 sonnet/opus/haiku 各代，支援 5m/1h cache 區分（5m=$3.75/M、1h=$6/M for sonnet）、跨模型 session 分別計價、prefix/family fallback。
+  2. `session-manager.ts` `captureClaudeConversationId()` 在抓到 conv_id 後啟動 `startJsonlUsagePolling(sessionId, jsonlPath)`：每 5s 重算 cost，與 session 上的舊值取 max（max-wins，避免暫態回退），有變化就 emit `usage_update` 給 renderer；session 結束自動清掉 poller。
+  3. statusLine / `--settings` 路徑保留為 fallback —— 哪天 Anthropic 修好 v2.1.114 的合併邏輯就會自動生效，不刪。
+  4. workspace trust（`ensureWorkspaceTrust`）保留 —— 雖然不是這次的關鍵，仍然是 statusLine fallback 路徑的前提。
 - **驗證**:
-  - 8 個單元測試（`tests/services/session-spawn-helpers.test.ts`）涵蓋首次 trust、idempotent、空 projects 欄位、malformed JSON、寫入失敗、路徑規範化
-  - 真機 spawn 一個 session → 確認 `.maestro-usage/<sid>.json` 有寫入 → DB `cost_usd > 0`
+  - 11 個單元測試（`tests/services/jsonl-usage-tracker.test.ts`）涵蓋 zero-init、空檔、無 usage 事件、累加、5m/1h 細分、opus 定價、模型切換、unknown model fallback、malformed line skip
+  - 真實 session 校準：用真機 JSONL 檔（67 input / 6586 output / 118029 cc_1h / 883289 cr，sonnet-4-6）獨立計算 = $1.0722，parser 輸出 $1.0722，誤差 < 1¢
+  - 8 個既有 spawn-helpers 測試仍通過
 - **預防**:
   - **上游版本變更監控**：Claude Code changelog 中與 statusLine / hooks / settings 相關的 security fix 必須當下評估對 AgentHub 的影響
-  - **避免假修復**：PM-004 與 PM-005 都鎖定在 env var / 全域覆寫，沒有從「為什麼 statusLine subprocess 根本沒被 spawn」這個更上游的問題去查；下次調查 statusLine 失效務必先驗證 subprocess 是否被執行（log strace / 手動跑 + 比對 PTY 輸出是否含 `tok: `）
+  - **避免假修復（這次學到第三次）**：前三次修復都鎖定在「讓 statusLine subprocess 正確執行」，但都沒發現 `--settings` flag 對 statusLine 整個欄位無效。下次同類問題務必：(a) 用 `--debug --debug-file` 確認 setting 是否真的被 Claude 接收；(b) 用 unique marker 而非 hope-based 推論；(c) 評估「換一條 cost 來源」是否更穩定，而不是死磕同一條鏈路
+  - **首選權威來源**：Claude Code 自己的 JSONL 是計費權威，比 statusLine（會被 trust / settings 合併邏輯影響）更不易壞
   - **工具**：考慮在 spawn 時 log Claude Code 版本，方便日後追溯哪一版開始問題
