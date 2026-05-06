@@ -184,8 +184,8 @@ sudo apt-get install -y build-essential python3
 
 ```bash
 # Clone
-git clone https://github.com/shenjuneyu/yu-agent-hub.git
-cd yu-agent-hub
+git clone https://github.com/starklab/Agent-hub.git
+cd Agent-hub
 
 # Install
 npm install
@@ -250,6 +250,6 @@ MIT
 
 *Built for one-person companies that think big.*
 
-**[GitHub](https://github.com/dodo0095/Agent-hub)**
+**[GitHub](https://github.com/starklab/Agent-hub)**
 
 </div>
