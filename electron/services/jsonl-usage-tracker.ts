@@ -14,7 +14,8 @@
  * This module reads that file and computes total cost using model pricing.
  * It's a defensive replacement / supplement for the statusLine mechanism.
  */
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../utils/logger';
 
 // ─── Pricing ─────────────────────────────────────────────────────────────────
@@ -56,6 +57,18 @@ const PRICING: Record<string, ModelPricing> = {
     cacheCreate5m: 3.75, cacheCreate1h: 6, cacheRead: 0.30,
   },
   // Opus family
+  'claude-opus-4-7': {
+    input: 15, output: 75,
+    cacheCreate5m: 18.75, cacheCreate1h: 30, cacheRead: 1.50,
+  },
+  'claude-opus-4-6': {
+    input: 15, output: 75,
+    cacheCreate5m: 18.75, cacheCreate1h: 30, cacheRead: 1.50,
+  },
+  'claude-opus-4-5': {
+    input: 15, output: 75,
+    cacheCreate5m: 18.75, cacheCreate1h: 30, cacheRead: 1.50,
+  },
   'claude-opus-4-1': {
     input: 15, output: 75,
     cacheCreate5m: 18.75, cacheCreate1h: 30, cacheRead: 1.50,
@@ -217,4 +230,75 @@ export function parseJsonlUsage(filePath: string): JsonlUsage {
   result.turnsCount = turns;
   result.model = model;
   return result;
+}
+
+// ─── JSONL file resolution ──────────────────────────────────────────────────
+
+/**
+ * Read the first non-empty line of a JSONL file and return its `timestamp`
+ * in epoch milliseconds. Returns null if the file is empty / malformed / has
+ * no timestamp on its first event.
+ *
+ * Used as a fallback when we cannot pin a session to a JSONL file via
+ * "new-file detection" (e.g. resume sessions that append to existing files,
+ * or when the JSONL was created before our snapshot).
+ */
+export function getJsonlFirstTimestamp(filePath: string): number | null {
+  if (!existsSync(filePath)) return null;
+  try {
+    // Read up to 64KB — first event is virtually always within the first
+    // few KB. Avoid loading huge files into memory just to peek at the head.
+    const raw = readFileSync(filePath, 'utf-8').slice(0, 65536);
+    for (const line of raw.split('\n')) {
+      if (!line) continue;
+      try {
+        const evt = JSON.parse(line);
+        if (typeof evt.timestamp === 'string') {
+          const ts = Date.parse(evt.timestamp);
+          if (!Number.isNaN(ts)) return ts;
+        }
+      } catch { /* malformed line — try next */ }
+    }
+  } catch { /* file vanished mid-read */ }
+  return null;
+}
+
+/**
+ * Find the JSONL file in `convDir` whose first event's timestamp falls within
+ * `windowMs` of `targetTimeMs`. Returns the closest match, or null if none.
+ *
+ * Used as a fallback in `captureClaudeConversationId` when the new-file
+ * detection times out (common for resume sessions, which append to existing
+ * JSONL files instead of creating new ones).
+ */
+export function findJsonlByStartTime(
+  convDir: string,
+  targetTimeMs: number,
+  windowMs: number = 120_000,
+): { file: string; convId: string; deltaMs: number } | null {
+  if (!existsSync(convDir)) return null;
+  let files: string[];
+  try {
+    files = readdirSync(convDir).filter((f) => f.endsWith('.jsonl'));
+  } catch { return null; }
+
+  let best: { file: string; convId: string; deltaMs: number } | null = null;
+  for (const f of files) {
+    const fullPath = join(convDir, f);
+    // Quick reject by mtime: if file was modified more than windowMs * 4 before
+    // target, skip the JSON parse work entirely.
+    try {
+      const st = statSync(fullPath);
+      if (Math.abs(st.mtimeMs - targetTimeMs) > windowMs * 4 && st.mtimeMs < targetTimeMs) continue;
+    } catch { continue; }
+
+    const firstTs = getJsonlFirstTimestamp(fullPath);
+    if (firstTs === null) continue;
+    const delta = Math.abs(firstTs - targetTimeMs);
+    if (delta > windowMs) continue;
+    if (!best || delta < best.deltaMs) {
+      best = { file: f, convId: f.replace('.jsonl', ''), deltaMs: delta };
+    }
+  }
+  return best;
 }

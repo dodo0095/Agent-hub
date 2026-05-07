@@ -1,7 +1,7 @@
 # 踩坑紀錄
 
-> **版本**: v1.0
-> **最後更新**: 2026-03-24
+> **版本**: v1.2
+> **最後更新**: 2026-05-08
 
 ---
 
@@ -188,3 +188,40 @@
   - **避免假修復（這次學到第三次）**：前三次修復都鎖定在「讓 statusLine subprocess 正確執行」，但都沒發現 `--settings` flag 對 statusLine 整個欄位無效。下次同類問題務必：(a) 用 `--debug --debug-file` 確認 setting 是否真的被 Claude 接收；(b) 用 unique marker 而非 hope-based 推論；(c) 評估「換一條 cost 來源」是否更穩定，而不是死磕同一條鏈路
   - **首選權威來源**：Claude Code 自己的 JSONL 是計費權威，比 statusLine（會被 trust / settings 合併邏輯影響）更不易壞
   - **工具**：考慮在 spawn 時 log Claude Code 版本，方便日後追溯哪一版開始問題
+
+### PM-011: PM-010 修復「程式碼進了 main 但 cost 仍歸零」— 三個獨立失敗串成沉默掉鍊
+
+- **發現日期**: 2026-05-08
+- **影響期間**: 2026-04-18 至 2026-05-08（共 20 天，全部 ~85 個 session cost = $0；JSONL 檔案實際累積 ~$482 USD 真實開銷未進 DB）
+- **問題**: PM-010 把 JSONL 解析架構合進 `main` 並附 11 個單元測試 + 真機校準，commit 訊息標榜「parser 算 = $1.0722，誤差 < 1¢」。但實際每天打開 dashboard 看到的 cost 仍是 $0。三次「修復」用掉大量 session 額度，沒一次真正落地。
+- **症狀**:
+  - DB query：`SELECT COUNT(*) FROM session_events WHERE subtype='usage_update'` 自 4/18 後 = 0（poller 從未觸發）
+  - DB query：4/18 後 ~100 個 session 中只有 2 個寫入 `claude_conversation_id`（conv-id 抓取邏輯失敗率 98%）
+  - `~/.claude/projects/.../*.jsonl` 檔案是齊全的，跑獨立 parser 算得出真實 cost（~$482 累計）—— 證明資料源沒問題
+- **根因（三個獨立失敗，缺一不可解）**:
+  1. **build artifact 沒重新編譯**: `out/main/index.js` 時間戳是 4/29，PM-010 fix 是 5/5 才進 main。Electron app 跑的是 4/29 的舊 build，根本不含 jsonl-usage-tracker。grep `out/main/index.js` 找不到 `jsonl-usage` 任何字串。
+  2. **fix 沒進當前工作分支**: `agent/tech-lead/sprint-5/T10` 從 `9e9904f` 分出後就沒再 merge 過 main，開發/測試永遠跑不到 5/5 的修復。
+  3. **conv-id 抓取邏輯只支援新建場景**: `captureClaudeConversationId()` 採「snapshot 既存 JSONL 列表 → poll 新檔案」策略，30 秒 timeout。但 AgentHub 大量使用 `claude --resume <conv-id>`（`session-spawn-helpers.ts:53/71`），Claude resume 時 **append 到既有 JSONL** 而非建新檔，poller 永遠抓不到「new file」→ 30 秒後靜默 timeout → `startJsonlUsagePolling` 從未被呼叫 → JSONL 路徑形同未啟用。
+  4. **（次要）持久化只在 session 結束**: 即使 poller 正常更新 `session.costUsd`，`persistSessionCost()` 只在 session end 時 fire。互動式 session 可能跑數小時不結束，in-memory cost 沒落 DB；app crash / 強制關閉時直接 0。
+- **驗證根因的方法**:
+  1. 直接 query 用戶 production DB：`SELECT date(started_at), SUM(CASE WHEN cost_usd>0 THEN 1 ELSE 0 END), COUNT(*) FROM claude_sessions GROUP BY date(started_at)` —— 4/18 後每天 0/N 比例
+  2. 比對 build 時間戳 vs commit 時間戳 + grep build artifact 找不到關鍵字串
+  3. 查 `session_events.subtype='usage_update'` 計數 = 0 —— 證明 poller 從未 fire
+- **解法**:
+  1. **fast-forward main 到當前分支**：含 PM-010 全部變更
+  2. **`captureClaudeConversationId()` 重寫**：增加 `knownConvId` 參數；resume 場景（`isResume` / `isDirectResume`）直接傳已知 conv-id，跳過輪詢；新建場景把 timeout 從 30s 拉長到 90s，並加 fallback 用首事件 timestamp 比對 session.startedAt（±120s window）匹配 JSONL，同時涵蓋「Claude 啟動慢」與「resume 沒新檔」兩種失敗
+  3. **`startJsonlUsagePolling()` 加每 poll DB 寫入**：每次成功累加都 `UPDATE claude_sessions SET cost_usd, input_tokens, output_tokens, turns_count`，跨 crash / 跨日 / 跨關閉都有資料；不再依賴 session-end 的單點寫入
+  4. **新增 `getJsonlFirstTimestamp` / `findJsonlByStartTime` 工具**：把 timestamp 比對抽出來可單獨測試（8 個新增單元測試覆蓋 missing dir / 多候選取最近 / 視窗外拒絕 / mtime 快速跳過）
+  5. **pricing 表補齊 opus-4-5 / 4-6 / 4-7**：實機 JSONL 出現 `claude-opus-4-7` 字串會 fallback 到 4-1 baseline，誤差數十美金級
+  6. **重新 build**：覆蓋 `out/main/index.js`，grep 確認 `findJsonlByStartTime` / `knownConvId` / `getJsonlFirstTimestamp` 都進去
+- **驗證**:
+  - 一次性 script `scripts/verify-jsonl-cost.cjs` 掃當前專案全部 48 個 JSONL，總計 $482 + 個別檔案 cost 列表（最大單筆 $122.25）—— 確認資料源端到端可算
+  - 19 個 jsonl-usage-tracker 單元測試（11 既有 + 8 新增），全綠
+  - 8 個 session-spawn-helpers 測試仍通過
+  - typecheck（`tsc --noEmit -p tsconfig.node.json`）通過
+- **預防（這次特別重要）**:
+  - **永遠先 query production DB 證實再宣告 fix 完成**：前三次修復都用「unit test + 真機校準」當證據，但都沒人 query 過用戶 DB 看 `cost_usd > 0` 的 row 有沒有真的多出來。下次「cost / 紀錄類」修復必須附帶 production DB query 結果作為 acceptance gate。
+  - **build artifact 過期檢查**：commit `electron/services/*.ts` 後若沒 push 配套的 `npm run build`，任何宣稱修復的 commit 都不算數。考慮加 CI 步驟「build 時間戳 < electron/services 內任何檔案的 mtime」就 fail。
+  - **branch 同步守則**：tech-lead 在 production-incident 修復場景，**強制以 main 為 base 開新分支**，不在舊 feature branch 上做。否則「main 上有 fix 但用戶用的版本沒有」會繼續發生。
+  - **互動式 session 必須有跨 session-end 的持久化**：任何「只在 session end 寫 DB」的設計都不能用於長 session 的累計指標（cost、turn、token）。Periodic write 是基本盤，不是 nice-to-have。
+  - **同一個 bug 第三次出現就停下來重新審題**：PM-004 / PM-005 / PM-010 都假設「statusLine 路徑要修好」、PM-010 雖然換 JSONL 但仍假設「conv-id 抓取會成功」。連續三次同症狀沒根治，必須跳出「修當下發現的失敗點」的迴圈，回頭問「這條 pipeline 從頭到尾每一段都驗過了嗎」。這次補上 production DB query 後一次抓到三個串聯失敗。
