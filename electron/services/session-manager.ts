@@ -25,7 +25,7 @@ import {
   applyResultEventUsage,
   persistSessionCost,
 } from './session-cost-tracker';
-import { parseJsonlUsage } from './jsonl-usage-tracker';
+import { parseJsonlUsage, findJsonlByStartTime } from './jsonl-usage-tracker';
 import { scanResumableSessions } from './session-conversation-scanner';
 import {
   buildClaudeArgs,
@@ -354,7 +354,27 @@ class SessionManager {
       }, 2000);
     }
 
-    this.captureClaudeConversationId(sessionId);
+    // Determine the Claude conversation ID up-front when possible:
+    //  - Direct resume: caller supplied it
+    //  - Resume by sessionId: look it up from claude_sessions
+    // For new spawns we still have to poll, since Claude generates the conv-id
+    // when it writes the JSONL.
+    let knownConvId: string | null = null;
+    if (isDirectResume && params.resumeConversationId) {
+      knownConvId = params.resumeConversationId;
+    } else if (isResume && params.resumeSessionId) {
+      try {
+        const rows = database.prepare(
+          'SELECT claude_conversation_id FROM claude_sessions WHERE id = ?',
+          [params.resumeSessionId],
+        );
+        if (rows.length > 0 && (rows[0] as { claude_conversation_id?: string }).claude_conversation_id) {
+          knownConvId = (rows[0] as { claude_conversation_id: string }).claude_conversation_id;
+        }
+      } catch (err) { logger.warn('Failed to look up claude_conversation_id for resume', err); }
+    }
+
+    this.captureClaudeConversationId(sessionId, knownConvId);
     return { sessionId, ptyId };
   }
 
@@ -807,7 +827,21 @@ class SessionManager {
         if (usage.costUsd > session.costUsd) { session.costUsd = usage.costUsd; updated = true; }
         if (usage.inputTokens > session.inputTokens) { session.inputTokens = usage.inputTokens; updated = true; }
         if (usage.outputTokens > session.outputTokens) { session.outputTokens = usage.outputTokens; updated = true; }
+        if (usage.turnsCount > session.turnsCount) { session.turnsCount = usage.turnsCount; updated = true; }
         if (updated) {
+          // Persist to DB on every change so cost survives crash / unclean exit.
+          // persistSessionCost only fires on session end, but interactive sessions
+          // can run for hours — losing in-memory cost is the main reason past
+          // fixes appeared to "work in tests" but never landed in production DB.
+          try {
+            database.run(
+              `UPDATE claude_sessions
+                 SET cost_usd = ?, input_tokens = ?, output_tokens = ?, turns_count = ?
+               WHERE id = ?`,
+              [session.costUsd, session.inputTokens, session.outputTokens, session.turnsCount, sessionId],
+            );
+          } catch (err) { logger.warn(`Failed to persist incremental cost for ${sessionId}`, err); }
+
           eventBus.emitSessionEvent({
             sessionId,
             type: 'system',
@@ -974,45 +1008,85 @@ class SessionManager {
   }
 
   /**
-   * Poll for the Claude Code conversation ID created by a new session.
-   * Checks every 2 seconds for up to 30 seconds.
+   * Identify the Claude Code conversation JSONL belonging to a session and
+   * start usage polling against it. Three resolution paths, in order:
+   *
+   *   1. `knownConvId` provided (resume case) → use directly, no polling.
+   *   2. New-file detection: snapshot existing JSONLs, poll for a new file.
+   *      Works for fresh spawns, fails for resume (which append to existing).
+   *   3. Fallback: after the new-file watch times out, scan the dir for any
+   *      JSONL whose first event timestamp falls within ±120s of session start.
+   *      Catches resume sessions and slow-starting new sessions.
+   *
+   * Total max wait: 90s (45 attempts × 2s) before giving up. The fallback runs
+   * once on each tick so we converge as soon as Claude finishes warming up.
    */
-  private captureClaudeConversationId(sessionId: string): void {
+  private captureClaudeConversationId(sessionId: string, knownConvId: string | null = null): void {
     const session = this.sessions.get(sessionId);
-    const convDir = getClaudeConversationsDir(session?.workDir || process.cwd());
+    if (!session) return;
+    const convDir = getClaudeConversationsDir(session.workDir || process.cwd());
+    const sessionStartMs = new Date(session.startedAt).getTime();
 
+    // Path 1: We already know the conv-id (resume case). Start tracking now.
+    if (knownConvId) {
+      const jsonlPath = join(convDir, `${knownConvId}.jsonl`);
+      try {
+        database.run('UPDATE claude_sessions SET claude_conversation_id = ? WHERE id = ?', [knownConvId, sessionId]);
+      } catch (err) { logger.warn('Failed to save claude_conversation_id (resume)', err); }
+      logger.info(`Reusing known Claude conversation ID ${knownConvId} for resume session ${sessionId}`);
+      this.startJsonlUsagePolling(sessionId, jsonlPath);
+      return;
+    }
+
+    // Path 2 + 3: For fresh spawns, snapshot then poll for new file or fallback by timestamp.
     let existingFiles: Set<string>;
     try {
       existingFiles = new Set(existsSync(convDir) ? readdirSync(convDir).filter((f) => f.endsWith('.jsonl')) : []);
     } catch { existingFiles = new Set(); }
 
+    const MAX_ATTEMPTS = 45;       // 45 × 2s = 90s
+    const FALLBACK_AFTER = 8;      // start scanning by-timestamp after 16s
     let attempts = 0;
     const timer = setInterval(() => {
-      if (++attempts > 15 || !this.sessions.has(sessionId)) { clearInterval(timer); return; }
+      if (++attempts > MAX_ATTEMPTS || !this.sessions.has(sessionId)) {
+        if (attempts > MAX_ATTEMPTS) {
+          logger.warn(`captureClaudeConversationId timed out for session ${sessionId} after ${MAX_ATTEMPTS * 2}s`);
+        }
+        clearInterval(timer);
+        return;
+      }
       try {
         if (!existsSync(convDir)) return;
-        const newFiles = readdirSync(convDir).filter((f) => f.endsWith('.jsonl') && !existingFiles.has(f));
-        if (newFiles.length === 0) return;
 
-        let best: { file: string; mtime: number } | null = null;
-        for (const f of newFiles) {
-          try { const st = statSync(join(convDir, f)); if (!best || st.mtimeMs > best.mtime) best = { file: f, mtime: st.mtimeMs }; } catch { /* skip */ }
+        // Path 2: prefer new-file detection (the cleanest signal)
+        const newFiles = readdirSync(convDir).filter((f) => f.endsWith('.jsonl') && !existingFiles.has(f));
+        let bestFile: string | null = null;
+        if (newFiles.length > 0) {
+          let bestMtime = -Infinity;
+          for (const f of newFiles) {
+            try {
+              const st = statSync(join(convDir, f));
+              if (st.mtimeMs > bestMtime) { bestMtime = st.mtimeMs; bestFile = f; }
+            } catch { /* skip */ }
+          }
         }
 
-        if (best) {
-          const convId = best.file.replace('.jsonl', '');
+        // Path 3: fall back to timestamp matching (catches resume + slow starts)
+        if (!bestFile && attempts >= FALLBACK_AFTER) {
+          const match = findJsonlByStartTime(convDir, sessionStartMs, 120_000);
+          if (match) {
+            bestFile = match.file;
+            logger.info(`Matched JSONL ${match.convId} by start-time (Δ ${match.deltaMs}ms) for session ${sessionId}`);
+          }
+        }
+
+        if (bestFile) {
+          const convId = bestFile.replace('.jsonl', '');
           try { database.run('UPDATE claude_sessions SET claude_conversation_id = ? WHERE id = ?', [convId, sessionId]); }
           catch (err) { logger.warn('Failed to save claude_conversation_id', err); }
           logger.info(`Captured Claude conversation ID ${convId} for session ${sessionId}`);
           clearInterval(timer);
-
-          // Start JSONL-based usage tracking now that we know which file to read.
-          // This is more reliable than statusLine because Claude itself writes the
-          // JSONL on every assistant turn; statusLine subprocess execution is
-          // gated by workspace trust + only honoured from user/project settings,
-          // not from the per-session `--settings` flag (v2.1.114 behaviour).
-          const jsonlPath = join(convDir, best.file);
-          this.startJsonlUsagePolling(sessionId, jsonlPath);
+          this.startJsonlUsagePolling(sessionId, join(convDir, bestFile));
         }
       } catch (err) { logger.warn('Error during conversation ID capture', err); }
     }, 2000);

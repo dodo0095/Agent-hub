@@ -4,7 +4,11 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { parseJsonlUsage } from '../../electron/services/jsonl-usage-tracker';
+import {
+  parseJsonlUsage,
+  getJsonlFirstTimestamp,
+  findJsonlByStartTime,
+} from '../../electron/services/jsonl-usage-tracker';
 
 let tmpDir: string;
 
@@ -242,5 +246,77 @@ describe('parseJsonlUsage', () => {
     const usage = parseJsonlUsage(path);
     expect(usage.costUsd).toBeCloseTo(0.8066, 2);
     expect(usage.outputTokens).toBe(6586);
+  });
+});
+
+describe('getJsonlFirstTimestamp', () => {
+  it('returns null for missing files', () => {
+    expect(getJsonlFirstTimestamp(join(tmpDir, 'nope.jsonl'))).toBeNull();
+  });
+
+  it('returns null when no event has a timestamp', () => {
+    const path = writeJsonl([{ type: 'user', message: { content: 'hi' } }]);
+    expect(getJsonlFirstTimestamp(path)).toBeNull();
+  });
+
+  it('reads the first event timestamp as epoch ms', () => {
+    const iso = '2026-05-08T05:30:00.000Z';
+    const path = writeJsonl([
+      { timestamp: iso, type: 'user' },
+      { timestamp: '2026-05-08T05:31:00.000Z', type: 'assistant' },
+    ]);
+    expect(getJsonlFirstTimestamp(path)).toBe(Date.parse(iso));
+  });
+
+  it('skips malformed lines and falls through to a valid one', () => {
+    const path = join(tmpDir, 'mixed.jsonl');
+    const iso = '2026-05-08T06:00:00.000Z';
+    writeFileSync(path, `{not-json}\n${JSON.stringify({ timestamp: iso })}\n`, 'utf-8');
+    expect(getJsonlFirstTimestamp(path)).toBe(Date.parse(iso));
+  });
+});
+
+describe('findJsonlByStartTime', () => {
+  function writeNamed(filename: string, events: unknown[]): string {
+    const path = join(tmpDir, filename);
+    writeFileSync(path, events.map((e) => JSON.stringify(e)).join('\n'), 'utf-8');
+    return path;
+  }
+
+  it('returns null for missing dir', () => {
+    expect(findJsonlByStartTime(join(tmpDir, 'nope'), Date.now())).toBeNull();
+  });
+
+  it('matches a JSONL whose first timestamp is within the window', () => {
+    // Use "now" for the target so the mtime quick-reject (which compares mtime
+    // to target) doesn't filter out our just-written test files.
+    const now = Date.now();
+    const targetIso = new Date(now).toISOString();
+    const innerIso = new Date(now + 30_000).toISOString();
+    writeNamed('aaaa-1111-2222-3333.jsonl', [
+      { timestamp: innerIso, type: 'user' },
+    ]);
+    const match = findJsonlByStartTime(tmpDir, Date.parse(targetIso), 60_000);
+    expect(match).not.toBeNull();
+    expect(match!.convId).toBe('aaaa-1111-2222-3333');
+    expect(match!.deltaMs).toBeLessThanOrEqual(30_000);
+  });
+
+  it('rejects files outside the window', () => {
+    const now = Date.now();
+    writeNamed('too-old.jsonl', [
+      // First-event timestamp is 2 hours before target — clearly outside window
+      { timestamp: new Date(now - 2 * 60 * 60 * 1000).toISOString(), type: 'user' },
+    ]);
+    expect(findJsonlByStartTime(tmpDir, now, 60_000)).toBeNull();
+  });
+
+  it('picks the closest match when multiple candidates qualify', () => {
+    const now = Date.now();
+    writeNamed('further.jsonl', [{ timestamp: new Date(now - 60_000).toISOString() }]); // 60s before
+    writeNamed('closer.jsonl',  [{ timestamp: new Date(now + 10_000).toISOString() }]); // 10s after
+    const match = findJsonlByStartTime(tmpDir, now, 120_000);
+    expect(match).not.toBeNull();
+    expect(match!.convId).toBe('closer');
   });
 });
