@@ -11,6 +11,7 @@
 - Node.js: C:\Program Files\nodejs\node.exe
 - 所有 Python 指令請用完整路徑或直接 `python`（不是 python3）
 - 不要使用 findstr，改用 grep
+- **工作目錄規則**：本專案在磁碟上有兩份 clone，用途嚴格分開，詳見「開發流程」段落。**Agent 一律在 `ALL PROJECT\Agent-hub\` 做修正與測試，禁止寫入 `AgentHub\Agent-hub\`。**
 
 ---
 
@@ -41,10 +42,25 @@
 
 ## 開發流程
 
-- **正式版（Production）**: 此目錄 `/Applications/MAMP/htdocs/AgentHub/`，分支 `main`
-- **開發測試版（Dev）**: `/Applications/MAMP/htdocs/AgentHub-dev/`，透過 git worktree 指向 `dev` 分支
-- **工作流程**: 在 `AgentHub-dev/`（dev 分支）開發測試 → 測好後 merge 回 `main` → 更新到 `AgentHub/`
-- **注意**: `AgentHub-dev/` 是 worktree，不是獨立 repo，共用同一個 git history
+> ⚠️ 本機磁碟上有兩份 clone，用途嚴格分開，**Agent 不可寫錯邊**。
+
+| 路徑 | 角色 | 分支 | Agent 可否寫入 |
+|------|------|------|---------------|
+| `C:\Users\Bandai\Desktop\ALL PROJECT\Agent-hub\` | **Dev / Canonical** — 所有修正、測試、Sprint 工作都在這 | feature 分支（如 `agent/tech-lead/sprint-N/Tn`），merge 回 `main` | ✅ 是 |
+| `C:\Users\Bandai\Desktop\AgentHub\Agent-hub\` | **Verify-only** — 老闆執行確認用的乾淨副本 | `main` | ❌ 否（由老闆自行 git pull 同步） |
+
+**工作流程**：
+1. Agent 在 `ALL PROJECT\Agent-hub\` 開分支 → 寫程式 → 測試 → commit → 推上去 → merge 回 `main`
+2. 老闆在 `AgentHub\Agent-hub\` 執行 `git pull` → 在乾淨副本上跑驗證
+
+**禁止**：
+- Agent 直接編輯 `AgentHub\Agent-hub\` 任何檔案（包含 hotfix）
+- 兩份檔案用 `cp` / Windows 檔總管手動同步
+- 在 `AgentHub\Agent-hub\` 上跑 `npm install` 以外的寫操作
+
+**Agent 自我檢查**：每次 Bash / Read / Edit 前先 `pwd`，若落在 `AgentHub\Agent-hub\` 立刻 `cd "C:\Users\Bandai\Desktop\ALL PROJECT\Agent-hub"`。
+
+> 兩份不是 git worktree，是兩個獨立 clone，**沒有共用 .git**，所以一邊改不會自動到另一邊。
 
 ---
 
