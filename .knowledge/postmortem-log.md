@@ -1,7 +1,7 @@
 # 踩坑紀錄
 
-> **版本**: v1.2
-> **最後更新**: 2026-05-08
+> **版本**: v1.3
+> **最後更新**: 2026-05-28
 
 ---
 
@@ -231,3 +231,28 @@
   - **架構**：抽出 `electron/services/pricing.ts` 給 jsonl-usage-tracker（即時）和 cost-backfill（啟動時）共用，避免價目表兩處維護
   - **驗證**：7 個單元測試覆蓋 match / skip / write-failure / no-jsonl / no-candidates / metadata-stamp / event-emit
   - **狀態**：✅ 已解決（即時 + 補登兩條路徑都到位）
+
+### PM-012: 三類預存測試失敗 — 影響 31 個案例，與最近的 cost tracking 修復無關
+
+- **發現日期**: 2026-05-28（tech-lead 在 PM-011 收尾時跑全套測試發現）
+- **影響範圍**: `npm test --run` 31 個 case 失敗（5 個檔案），無關 cost / backfill / 任何 PM-011 改動。在 origin/main 上重現 → 證實為預存問題
+- **狀態**: 🟡 待處理（未排 Sprint，需要老闆決定優先級）
+- **三類失敗模式**:
+  1. **`tests/services/session-manager.test.ts`（10 failed / 33 total）**
+     - 錯誤：`TypeError: () => ({feed: vi.fn(...), flush: vi.fn(), reset: ...}) is not a constructor`，發生在 `session-manager.ts:274:25`
+     - 推測：test 用 `vi.mock` 模擬某個建構子（可能是 `Terminal` from `@xterm/headless`），但 mock factory 回的是 factory function 而非 class。`session-manager.ts:274` 用 `new XxxClass()` 呼叫時爆掉
+     - 影響的測試：spawn 系列（5 個）、resume 系列（2 個）、stop（1 個）、cleanup（1 個）、直接 resume by conversationId（1 個）
+  2. **`tests/services/task-manager.test.ts`（4 failed / 19 total）**
+     - 錯誤：`TypeError: Cannot read properties of null (reading 'status')` — `taskManager.transition()` 回 null，測試卻 expect object
+     - 推測：transition() 行為改了（可能加上 validation 或回傳值改成 nullable），測試沒跟著更新
+     - 影響的測試：`created → assigned`、`in_progress → blocked`、9B expanded state machine 系列
+  3. **`tests/unit/SkillCreateModal.test.ts`（5）+ `SkillDetailPanel.test.ts`（8）+ `SkillTab.integration.test.ts`（4）= 17 failed**
+     - 錯誤：`TypeError: SupportedEventInterface is not a constructor` 出自 `@vue/test-utils/dist/vue-test-utils.cjs.js:1318:12`，所有 `trigger`/`setValue` 都炸
+     - 根因：**vitest 4.1.2 + @vue/test-utils 2.4.6 + 新版 jsdom 不相容**。vitest 4 改了 jsdom 版本，新 jsdom 的 `Event` 介面命名與 @vue/test-utils 寫死的 `SupportedEventInterface` 對不上
+     - 修法：升級 `@vue/test-utils` 到能配 vitest 4 的版本（社群討論建議 2.5+ alpha），或鎖回 vitest 3.x
+- **為何現在才發現**: 平時只跑「跟當前任務相關」的單檔測試（如 cost-backfill.test.ts），沒人主動跑 `npm test --run`。CI 也沒有自動跑全套（這本身是另一個漏洞）
+- **暫時影響**: 不阻擋功能開發（這些不是 cost 相關），但 CI gate 名存實亡 —— 如果有人改 session-manager 真把 spawn 弄壞，這 10 個失敗會被當成「本來就紅」而忽略
+- **預防 / 改善建議（需要老闆裁示是否排 Sprint）**:
+  1. 把 31 個失敗拆三條 ticket：A) session-manager mock 修正；B) task-manager 測試對齊；C) @vue/test-utils 升級到 vitest 4 相容版
+  2. 在 CI / pre-push hook 加 `npm test --run` 全套通過才能 merge，杜絕「紅了沒人發現」的長尾積壓
+  3. 修完後重新確認 `tests/services/cost-backfill.test.ts` 仍綠（這次是 7/7 通過）
