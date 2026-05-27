@@ -391,6 +391,14 @@ interface MaestroApi {
     messageDelivered: (callback: (data: unknown) => void) => void;
     messageRead: (callback: (data: unknown) => void) => void;
     taskUpdated: (callback: (data: { projectId: string; taskId: string; fromStatus: string; toStatus: string }) => void) => void;
+    costBackfillCompleted: (callback: (data: {
+      scanned: number;
+      candidates: number;
+      matched: number;
+      written: number;
+      totalUsdRecovered: number;
+      durationMs: number;
+    }) => void) => void;
   };
 }
 

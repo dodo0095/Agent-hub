@@ -136,6 +136,7 @@ function setupEventForwarding(): void {
   eventBus.on('message:read', (data) => safeSend(IpcChannels.MESSAGE_READ, data));
   eventBus.on('task:updated', (data) => safeSend(IpcChannels.TASK_UPDATED, data));
   eventBus.on('gate:reviewed', (data) => safeSend('gate:status-changed', data));
+  eventBus.on('cost:backfill-complete', (data) => safeSend(IpcChannels.COST_BACKFILL_COMPLETED, data));
   eventBus.onFileSynced((data) => safeSend(IpcChannels.PROJECT_SYNC_STATUS, data));
 }
 
@@ -256,6 +257,21 @@ app.whenReady().then(async () => {
   if (mainWindow) {
     trayService.initialize(mainWindow);
   }
+
+  // Auto-backfill cost for sessions missed by realtime polling (last 7 days).
+  // Async — never await; UI must not wait for filesystem scan + DB updates.
+  // Per-row 'usage_update' events update the renderer in place; a final
+  // 'cost:backfill-complete' event drives the toast in MaestroApi.on.costBackfillCompleted.
+  void import('./services/cost-backfill').then(({ runCostBackfill }) =>
+    runCostBackfill({ sinceDays: 7 })
+      .then((r) =>
+        logger.info(
+          `Cost backfill complete: ${r.written}/${r.matched} sessions, ` +
+            `$${r.totalUsdRecovered.toFixed(4)} recovered in ${r.durationMs}ms`,
+        ),
+      )
+      .catch((err) => logger.warn('Cost backfill failed', err)),
+  );
 
   // Start file watcher
   fileWatcher.start();

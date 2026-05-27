@@ -26,6 +26,15 @@ const path = require('path');
 const os = require('os');
 const initSqlJs = require('sql.js');
 
+// Validate argv — reject unknown flags so IME typos like "--apply（" don't
+// silently fall back to dry-run.
+const KNOWN_FLAGS = new Set(['--apply']);
+const unknownArgs = process.argv.slice(2).filter(a => !KNOWN_FLAGS.has(a));
+if (unknownArgs.length > 0) {
+  console.error(`Unknown argument(s): ${unknownArgs.map(a => JSON.stringify(a)).join(', ')}`);
+  console.error(`Usage: node scripts/backfill-cost.cjs [--apply]`);
+  process.exit(1);
+}
 const APPLY = process.argv.includes('--apply');
 const SINCE = '2026-04-18';
 const WINDOW_MS = 120_000;
@@ -213,7 +222,12 @@ function buildJsonlIndex() {
   // Apply
   if (!APPLY) {
     console.log('Dry run — no changes made. Re-run with --apply to write.');
-    process.exit(0);
+    // NOTE: Do NOT call process.exit() here — it triggers a libuv assertion
+    // (UV_HANDLE_CLOSING) on Windows because sql.js's Emscripten runtime still
+    // has async handles in flight. Release the WASM DB and let the IIFE
+    // resolve naturally so Node can shut down cleanly.
+    db.close();
+    return;
   }
 
   let written = 0;
@@ -248,4 +262,6 @@ function buildJsonlIndex() {
   const data = Buffer.from(db.export());
   fs.writeFileSync(dbPath, data);
   console.log(`\nApplied: ${written} rows updated. Total cost recovered: $${totalRecovered.toFixed(2)}`);
+  // Release WASM DB before exit (prevents libuv UV_HANDLE_CLOSING assert on Windows).
+  db.close();
 })();
