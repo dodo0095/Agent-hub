@@ -192,6 +192,29 @@ npm run lint         # ESLint 程式碼檢查
 
 ## 更新日誌
 
+### 2026-05-28 — Sprint 5 完成：跨 Agent SendMessage MCP 工具 + Cost Backfill 強化
+
+#### Sprint 5：Agent 互傳工具（MCP SendMessage）
+- **新增 `send_message` MCP 工具** — Agent 可在 Claude session 中呼叫此工具發送訊息給同事，無需老闆介入
+- **四層接力打通** — boss → PM → tech-lead → backend-architect 全鏈自動 PTY 注入（broker 3 秒 poll inbox → 找到新 unread → 格式化為「`--- [來自 XXX 的訊息] ---`」→ 注入下游 PTY）
+- **白名單安全模型** — 跨部門 L2 / 跨層級越權自動攔截，錯誤訊息列出 sender / blocked target / allowed list；`allowedTargets=[]` 時 fail-closed 全攔
+- **Rate Limit** — 每 session 每小時 20 條上限，per-process 計數隔離（重新 spawn 重置）
+- **跨進程 E2E 覆蓋** — `out/mcp/send-message-server.js` 編譯產物用 `child_process.spawn` 跑 JSON-RPC 對話，與 Claude CLI 實際啟動方式 100% 一致；可進 CI、可重複
+- **G3 測試驗收通過** — Sprint 5 範疇 26/26 測試全綠（MCP unit 8 + MCP E2E 7 + broker relay 4 + cost-backfill 7）
+
+#### PM-011 強化：In-Process Cost Backfill
+- **App 啟動自動補登** — `electron/services/cost-backfill.ts` 開機時掃 `~/.claude/projects/*.jsonl`，用 ±120s 時間窗 greedy match 把 `cost_usd=0` 的近 7 天 session 補上正確費用
+- **不再需要手動腳本** — 廢除 `scripts/backfill-cost.ts` 手動工作流
+- **IPC 四方同步** — 新增 `cost:backfill-completed` channel，前端可監聽補登事件即時更新圖表
+- **Pricing 模組獨立** — `electron/services/pricing.ts` 抽出共用定價表，避免 jsonl-usage-tracker 與 backfill 邏輯重複
+
+#### PM-012 追蹤：預存測試失敗 31 例
+- 發現 5 個檔案 31 個失敗（session-manager、task-manager、SkillCreateModal/DetailPanel/Tab）
+- 三類根因：xterm headless mock factory、taskManager transition 行為改動、`vitest 4 + @vue/test-utils 2.4 + jsdom` 不相容
+- 與 Sprint 5 / PM-011 完全無關，已記錄於 `.knowledge/postmortem-log.md` 等待 Sprint 排程
+
+---
+
 ### 2026-05-08 — PM-011 Cost Tracking 根治修復
 
 - **JSONL polling 落地** — 捨棄不穩定的 IPC 呼叫鏈，改由後端直接解析 Claude JSONL 使用紀錄寫入 production DB

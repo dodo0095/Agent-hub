@@ -414,7 +414,7 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 | T8 | 2026-05-28 | ✅ 完成 | 老闆授權跳過手動 SOP 直接收。自動化軌 4 TC 全綠（`tests/services/message-broker-relay.test.ts`）涵蓋 broker inbox 讀取 + 路由 + PTY 注入；MCP stdin/stdout 路徑由 T10 跨進程 E2E 覆蓋；4-session GUI 整合測試留給上線前手動驗收 |
 | T9 | 2026-05-28 | ✅ 完成 | 方案 C（跨進程 E2E，與 T10 同檔）；5 TC 通過：scenario A 跨部門攔截 + scenario B 跨層攔截 + positive control + mixed 防污染 + 空列表 fail-closed；錯誤訊息驗 sender/target/allowed-list 完整 |
 | T10 | 2026-05-28 | ✅ done | 方案 C（跨進程 E2E）；2 TC 通過：rate-limit 阻擋第 N+1 條 + per-process 隔離；測試檔 tests/mcp/send-message-server.e2e.test.ts |
-| T11 | | | |
+| T11 | 2026-05-28 | ✅ 完成 | L1 Review 通過（Blocker:0 Major:0 Minor:1 PM-012）→ PM 6 項 checklist 通過 → 老闆核准 G3。Sprint 5 範疇 26/26 全綠 |
 | T12 | | | |
 | T13 | | | |
 
@@ -424,7 +424,7 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 |------------|------|------|---------------|
 | 設計 Review（T1）| 2026-04-29 | ✅ 通過 | 設計文件完整，老闆確認無調整 |
 | 實作 Review（T2~T6）| 2026-04-29 | 通過 | Blocker:0 Major:0 Minor:3 — type duplication(M1), reply_to 靜默忽略(M2), list_inbox 未宣告(M3)；Minor 於 T12 處理 |
-| 測試 Review（T8~T10）| | | |
+| 測試 Review（T8~T10）| 2026-05-28 | 通過 | Blocker:0 Major:0 Minor:1 — PM-012 預存 31 個測試失敗（與 Sprint 5 無關，已單獨追蹤）；Sprint 5 相關 26/26 通過（MCP unit 8 + MCP E2E 7 + broker 4 + cost-backfill 7）|
 | 文件 Review（T12）| | | |
 
 ### Gate 紀錄
@@ -433,7 +433,7 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 |------|------|------|---------|
 | G0 | 2026-04-28 | ✅ 通過 | 老闆口頭核准；4 項議題全依 PM 建議定案（順序執行、20條/hr限制、跨層完全禁止、明確 error fallback）|
 | G2 | | | |
-| G3 | | | |
+| G3 | 2026-05-28 | ✅ 通過 | 老闆核准；Sprint 5 範疇 26/26 測試全綠；PM-012 預存 31 失敗單獨追蹤、暫不阻斷；T8 手動 SOP 軌已授權跳過 |
 | G4 | | | |
 
 ---
