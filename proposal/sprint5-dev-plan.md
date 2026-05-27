@@ -412,7 +412,7 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 | T6 | 2026-04-29 | ✅ done | G2 通過；8 TC 全過，tmpdir 隔離，純 Node.js |
 | T7 | 2026-04-29 | ✅ done | G2 Review：0 Blocker / 0 Major / 3 Minor（記錄在案）|
 | T8 | 2026-05-28 | ✅ 完成 | 老闆授權跳過手動 SOP 直接收。自動化軌 4 TC 全綠（`tests/services/message-broker-relay.test.ts`）涵蓋 broker inbox 讀取 + 路由 + PTY 注入；MCP stdin/stdout 路徑由 T10 跨進程 E2E 覆蓋；4-session GUI 整合測試留給上線前手動驗收 |
-| T9 | | | |
+| T9 | 2026-05-28 | ✅ 完成 | 方案 C（跨進程 E2E，與 T10 同檔）；5 TC 通過：scenario A 跨部門攔截 + scenario B 跨層攔截 + positive control + mixed 防污染 + 空列表 fail-closed；錯誤訊息驗 sender/target/allowed-list 完整 |
 | T10 | 2026-05-28 | ✅ done | 方案 C（跨進程 E2E）；2 TC 通過：rate-limit 阻擋第 N+1 條 + per-process 隔離；測試檔 tests/mcp/send-message-server.e2e.test.ts |
 | T11 | | | |
 | T12 | | | |

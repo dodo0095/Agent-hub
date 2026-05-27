@@ -274,3 +274,189 @@ describe('MCP send-message-server E2E (process boundary)', () => {
     expect(inbox).toHaveLength(4); // 2 from A + 2 from B
   });
 });
+
+/**
+ * Sprint 5 T9 — UNAUTHORIZED whitelist enforcement (process boundary).
+ *
+ * The whitelist lives in `AgentMcpConfig.allowedTargets`. Production builds
+ * this list from team-hierarchy.json: peers within the same department + the
+ * agent's direct upstream + (for L1) direct subordinates. The MCP server
+ * never reads the hierarchy itself — it just enforces the list it was given.
+ *
+ * What we verify across process boundaries (cannot be unit-tested):
+ *   ✓ The compiled out/mcp/send-message-server.js rejects non-whitelisted
+ *     targets BEFORE writing any inbox file (no side-effect leak)
+ *   ✓ The error response uses the snake_case envelope and names both the
+ *     sender and the allowed targets — operators need this to debug misconfig
+ *   ✓ The two real-world hierarchy violations from T9 spec both blocked:
+ *       A) L2-cross-department (literature-scout → backend-architect)
+ *       B) L2-skip-level (backend-architect → boss; boss is not direct upstream)
+ *   ✓ Positive control: a whitelisted target still goes through, proving the
+ *     filter is the only gate (not e.g. a broken process)
+ */
+describe('MCP send-message-server E2E — UNAUTHORIZED enforcement (T9)', () => {
+  let workDir: string;
+  let inboxDir: string;
+  let client: McpClient | null = null;
+
+  beforeAll(() => {
+    if (!existsSync(SERVER_JS)) {
+      throw new Error(
+        `Built MCP server not found at ${SERVER_JS}. Run \`npm run build:mcp\` first.`,
+      );
+    }
+  });
+
+  beforeEach(() => {
+    workDir = mkdtempSync(join(tmpdir(), 'mcp-e2e-unauth-'));
+    inboxDir = join(workDir, 'inboxes');
+    mkdirSync(inboxDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    if (client) {
+      await client.close();
+      client = null;
+    }
+    try {
+      rmSync(workDir, { recursive: true, force: true });
+    } catch {
+      // Windows sometimes holds onto temp dirs — tolerate.
+    }
+  });
+
+  function writeConfig(overrides: Partial<{
+    agentId: string;
+    allowedTargets: string[];
+    rateLimit: number;
+    projectId: string | null;
+  }> = {}): string {
+    const cfg = {
+      agentId: 'literature-scout',
+      allowedTargets: ['research-director'],
+      inboxDir,
+      projectId: null,
+      rateLimit: 20,
+      ...overrides,
+    };
+    const path = join(workDir, 'config.json');
+    writeFileSync(path, JSON.stringify(cfg), 'utf-8');
+    return path;
+  }
+
+  it('scenario A: blocks L2-cross-department (literature-scout → backend-architect)', async () => {
+    // literature-scout is academic L2; backend-architect is engineering L2.
+    // Hierarchy says cross-dept L2 talks must go up through L1s, so the
+    // built whitelist excludes backend-architect.
+    const configPath = writeConfig({
+      agentId: 'literature-scout',
+      allowedTargets: ['research-director', 'venue-strategist'], // 上級 + 同部門 peer
+    });
+    client = new McpClient(configPath);
+
+    const result = await client.sendMessage('backend-architect', '越權測試 A');
+
+    expect(result.error).toBe('UNAUTHORIZED');
+    expect(result.status).toBeUndefined();
+    expect(result.message_id).toBeUndefined();
+
+    // Error message must name the sender, the blocked target, AND the
+    // allowed list — operator debuggability requirement (T1 spec).
+    expect(result.message).toContain('literature-scout');
+    expect(result.message).toContain('backend-architect');
+    expect(result.message).toContain('research-director');
+    expect(result.message).toContain('venue-strategist');
+
+    // Critical: no inbox file should be created for the unauthorized target.
+    // The check must happen BEFORE any disk write — if a partial write leaks
+    // through, that's a Sprint 5 Blocker.
+    expect(existsSync(join(inboxDir, 'backend-architect.json'))).toBe(false);
+  });
+
+  it('scenario B: blocks L2-skip-level (backend-architect → boss)', async () => {
+    // backend-architect.reportsTo = tech-lead, NOT boss. The whitelist
+    // contains tech-lead + engineering peers but not boss.
+    const configPath = writeConfig({
+      agentId: 'backend-architect',
+      allowedTargets: ['tech-lead', 'frontend-developer', 'mobile-app-builder'],
+    });
+    client = new McpClient(configPath);
+
+    const result = await client.sendMessage('boss', '跳過 tech-lead 直接聯繫老闆');
+
+    expect(result.error).toBe('UNAUTHORIZED');
+    expect(result.message).toContain('backend-architect');
+    expect(result.message).toContain('boss');
+    expect(result.message).toContain('tech-lead');
+
+    expect(existsSync(join(inboxDir, 'boss.json'))).toBe(false);
+  });
+
+  it('positive control: a whitelisted target still receives the message', async () => {
+    // Sanity check — proves the UNAUTHORIZED tests above are detecting the
+    // whitelist gate, not some unrelated failure (e.g. broken inbox writer).
+    const configPath = writeConfig({
+      agentId: 'backend-architect',
+      allowedTargets: ['tech-lead'],
+    });
+    client = new McpClient(configPath);
+
+    const result = await client.sendMessage('tech-lead', '合法訊息');
+
+    expect(result.status).toBe('pending');
+    expect(result.error).toBeUndefined();
+    expect(result.message_id).toMatch(/[0-9a-f-]{36}/);
+    expect(existsSync(join(inboxDir, 'tech-lead.json'))).toBe(true);
+  });
+
+  it('mixed: blocked attempt does not poison the inbox of a subsequent allowed send', async () => {
+    // Defence-in-depth: even if an attacker bombards an unauthorized target
+    // first, a later legitimate send to an allowed target must still work
+    // and only contain the legitimate message.
+    const configPath = writeConfig({
+      agentId: 'backend-architect',
+      allowedTargets: ['tech-lead'],
+    });
+    client = new McpClient(configPath);
+
+    const blocked = await client.sendMessage('boss', '越權嘗試 1');
+    const allowed = await client.sendMessage('tech-lead', '合法訊息 1');
+
+    expect(blocked.error).toBe('UNAUTHORIZED');
+    expect(allowed.status).toBe('pending');
+
+    // No leakage to boss.json.
+    expect(existsSync(join(inboxDir, 'boss.json'))).toBe(false);
+
+    // tech-lead.json has exactly the one allowed message.
+    const techLeadInbox = JSON.parse(
+      readFileSync(join(inboxDir, 'tech-lead.json'), 'utf-8'),
+    ) as Array<{ text: string; from: string }>;
+    expect(techLeadInbox).toHaveLength(1);
+    expect(techLeadInbox[0].text).toBe('合法訊息 1');
+    expect(techLeadInbox[0].from).toBe('backend-architect');
+  });
+
+  it('empty allowedTargets list blocks every send (fail-closed semantics)', async () => {
+    // Guards against the worst regression: someone "simplifies" the check
+    // and accidentally makes an empty list mean "allow all".
+    const configPath = writeConfig({
+      agentId: 'backend-architect',
+      allowedTargets: [],
+    });
+    client = new McpClient(configPath);
+
+    const r1 = await client.sendMessage('tech-lead', 'attempt 1');
+    const r2 = await client.sendMessage('boss', 'attempt 2');
+    const r3 = await client.sendMessage('product-manager', 'attempt 3');
+
+    expect(r1.error).toBe('UNAUTHORIZED');
+    expect(r2.error).toBe('UNAUTHORIZED');
+    expect(r3.error).toBe('UNAUTHORIZED');
+
+    // Nothing on disk in the inbox dir.
+    expect(existsSync(join(inboxDir, 'tech-lead.json'))).toBe(false);
+    expect(existsSync(join(inboxDir, 'boss.json'))).toBe(false);
+    expect(existsSync(join(inboxDir, 'product-manager.json'))).toBe(false);
+  });
+});
