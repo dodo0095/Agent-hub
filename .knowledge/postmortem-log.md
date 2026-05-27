@@ -225,3 +225,9 @@
   - **branch 同步守則**：tech-lead 在 production-incident 修復場景，**強制以 main 為 base 開新分支**，不在舊 feature branch 上做。否則「main 上有 fix 但用戶用的版本沒有」會繼續發生。
   - **互動式 session 必須有跨 session-end 的持久化**：任何「只在 session end 寫 DB」的設計都不能用於長 session 的累計指標（cost、turn、token）。Periodic write 是基本盤，不是 nice-to-have。
   - **同一個 bug 第三次出現就停下來重新審題**：PM-004 / PM-005 / PM-010 都假設「statusLine 路徑要修好」、PM-010 雖然換 JSONL 但仍假設「conv-id 抓取會成功」。連續三次同症狀沒根治，必須跳出「修當下發現的失敗點」的迴圈，回頭問「這條 pipeline 從頭到尾每一段都驗過了嗎」。這次補上 production DB query 後一次抓到三個串聯失敗。
+- **後續強化（2026-05-28，commit `7dddee6`）**:
+  - **問題**：即時 polling 修好後，仍有歷史 session（AgentHub 沒開時 CLI 跑出來、或 app 跑到一半關掉）`cost_usd = 0`，需要一次性補登
+  - **解法**：新增 `electron/services/cost-backfill.ts`，app 啟動時非同步掃 `~/.claude/projects/*.jsonl`，對最近 7 天 `cost_usd = 0` 的 session 用 ±120s 時間窗 greedy 配對，補登 cost/token/turns 並蓋上 `cost_backfilled_at` 元資料。每筆發 `usage_update` 即時更新前端，完成發 `cost:backfill-complete` 觸發 toast
+  - **架構**：抽出 `electron/services/pricing.ts` 給 jsonl-usage-tracker（即時）和 cost-backfill（啟動時）共用，避免價目表兩處維護
+  - **驗證**：7 個單元測試覆蓋 match / skip / write-failure / no-jsonl / no-candidates / metadata-stamp / event-emit
+  - **狀態**：✅ 已解決（即時 + 補登兩條路徑都到位）
