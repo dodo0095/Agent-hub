@@ -158,6 +158,7 @@ export const IpcChannels = {
   MESSAGE_DELIVERED: 'message:delivered',
   MESSAGE_READ: 'message:read',
   TASK_UPDATED: 'task:updated',
+  COST_BACKFILL_COMPLETED: 'cost:backfill-completed',
 } as const;
 
 export interface IpcError {

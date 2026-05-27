@@ -533,6 +533,18 @@ export function useIpc() {
     maestro.on.taskUpdated(callback);
   }
 
+  // Cost backfill events (fired once per app boot after startup backfill completes)
+  function onCostBackfillCompleted(callback: (data: {
+    scanned: number;
+    candidates: number;
+    matched: number;
+    written: number;
+    totalUsdRecovered: number;
+    durationMs: number;
+  }) => void) {
+    maestro.on.costBackfillCompleted(callback);
+  }
+
   // Project Sync
   async function startProjectSync(projectId: string, workDir: string) {
     return maestro.projectSync.start({ projectId, workDir });
@@ -687,6 +699,8 @@ export function useIpc() {
     onMessageRead,
     // Task events
     onTaskUpdated,
+    // Cost backfill events
+    onCostBackfillCompleted,
     // Project Sync
     startProjectSync,
     stopProjectSync,

@@ -35,7 +35,9 @@
 | SessionManager | `session-manager.ts` | Session 生命週期、PTY 管理、輸出緩衝、Cost Tracking |
 | SessionSpawnHelpers | `session-spawn-helpers.ts` | spawn 純函式：CLI 參數組裝、cwd 解析、**workspace trust 自動接受** |
 | SessionCostTracker | `session-cost-tracker.ts` | Token/cost 解析（PTY 文字 + statusLine 檔案輪詢，於 v2.1.114 已不可靠，保留為 fallback） |
-| JsonlUsageTracker | `jsonl-usage-tracker.ts` | **權威 cost 來源**：解析 Claude Code 的 conversation JSONL（`~/.claude/projects/<encoded-cwd>/<conv-id>.jsonl`），逐 turn 累加 token 並用模型定價計算 cost。支援 5m/1h cache 區分、跨模型 session、prefix/family fallback |
+| JsonlUsageTracker | `jsonl-usage-tracker.ts` | **權威 cost 來源（即時）**：解析 Claude Code 的 conversation JSONL（`~/.claude/projects/<encoded-cwd>/<conv-id>.jsonl`），逐 turn 累加 token 並用模型定價計算 cost。支援 5m/1h cache 區分、跨模型 session、prefix/family fallback |
+| CostBackfill | `cost-backfill.ts` | **Cost 補登服務（啟動時）**：app 啟動時掃描所有 JSONL，對 `cost_usd = 0` 的歷史 session 執行 ±120s 時間窗 greedy 配對，補登 cost/token/turns。每筆發 `usage_update` 事件即時更新前端，完成時發 `cost:backfill-complete` |
+| Pricing | `pricing.ts` | 共用模型定價表（PRICING）+ `resolvePricing()`，給 JsonlUsageTracker / CostBackfill / 任何需要算 cost 的服務使用 |
 | Database | `database.ts` | sql.js 初始化、migration、CRUD |
 | AgentLoader | `agent-loader.ts` | 載入 Agent YAML 定義 |
 | PromptAssembler | `prompt-assembler.ts` | 組裝 System Prompt |

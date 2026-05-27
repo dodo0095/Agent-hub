@@ -299,6 +299,14 @@ export interface MaestroApi {
     messageDelivered: (callback: (data: unknown) => void) => void;
     messageRead: (callback: (data: unknown) => void) => void;
     taskUpdated: (callback: (data: unknown) => void) => void;
+    costBackfillCompleted: (callback: (data: {
+      scanned: number;
+      candidates: number;
+      matched: number;
+      written: number;
+      totalUsdRecovered: number;
+      durationMs: number;
+    }) => void) => void;
   };
 }
 
@@ -487,6 +495,9 @@ const api: MaestroApi = {
     },
     taskUpdated: (callback: (data: unknown) => void) => {
       ipcRenderer.on('task:updated', (_e, data) => callback(data));
+    },
+    costBackfillCompleted: (callback) => {
+      ipcRenderer.on('cost:backfill-completed', (_e, data) => callback(data));
     },
   },
   projectSync: {
