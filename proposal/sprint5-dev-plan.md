@@ -411,7 +411,7 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 | T5 | 2026-04-29 | ✅ done | G2 通過；6 TC 全過，MCP_TOOL_NAMES 常數驅動，防退化有效 |
 | T6 | 2026-04-29 | ✅ done | G2 通過；8 TC 全過，tmpdir 隔離，純 Node.js |
 | T7 | 2026-04-29 | ✅ done | G2 Review：0 Blocker / 0 Major / 3 Minor（記錄在案）|
-| T8 | | | |
+| T8 | 2026-05-28 | 🟡 in_review | 雙軌策略：(A) 自動化覆蓋 broker inbox 讀取 + 路由 + PTY 注入路徑（4 TC 通過，`tests/services/message-broker-relay.test.ts`）；(B) 手動驗收 SOP 9 步給老闆執行（GUI 真實 4-session 接力）。老闆完成手動驗收後改 done |
 | T9 | | | |
 | T10 | 2026-05-28 | ✅ done | 方案 C（跨進程 E2E）；2 TC 通過：rate-limit 阻擋第 N+1 條 + per-process 隔離；測試檔 tests/mcp/send-message-server.e2e.test.ts |
 | T11 | | | |
