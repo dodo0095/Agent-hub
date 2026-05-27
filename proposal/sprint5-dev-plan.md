@@ -413,7 +413,7 @@ T1 (設計確認) ─┬─ T2 (MCP server) ─┬─ T5 (prompt test) ─┐
 | T7 | 2026-04-29 | ✅ done | G2 Review：0 Blocker / 0 Major / 3 Minor（記錄在案）|
 | T8 | | | |
 | T9 | | | |
-| T10 | | | |
+| T10 | 2026-05-28 | ✅ done | 方案 C（跨進程 E2E）；2 TC 通過：rate-limit 阻擋第 N+1 條 + per-process 隔離；測試檔 tests/mcp/send-message-server.e2e.test.ts |
 | T11 | | | |
 | T12 | | | |
 | T13 | | | |
