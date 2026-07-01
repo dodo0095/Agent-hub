@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseTag from '../common/BaseTag.vue';
-import type { ProjectRecord, ProjectStats } from '../../stores/projects';
+import { useProjectsStore, type ProjectRecord, type ProjectStats } from '../../stores/projects';
 
 const props = defineProps<{
   project: ProjectRecord;
@@ -10,6 +10,18 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const projectsStore = useProjectsStore();
+
+const isArchived = computed(() => props.project.status === 'archived');
+
+async function toggleArchive() {
+  const nextStatus = isArchived.value ? 'active' : 'archived';
+  try {
+    await projectsStore.update(props.project.id, { status: nextStatus });
+  } catch (err) {
+    console.error('Failed to toggle project archive status', err);
+  }
+}
 
 const statusLabel = computed<Record<string, string>>(() => ({
   planning: t('projects.statusLabels.planning'),
@@ -95,10 +107,51 @@ const sprintFooterText = computed(() => {
     class="project-card"
     :class="{ 'project-card--completed': isCompleted }"
   >
-    <!-- Row 1: title (left) + status tag (right) -->
+    <!-- Row 1: title (left) + status tag + archive toggle (right) -->
     <div class="project-card__header">
       <h3 class="project-card__title">{{ project.name }}</h3>
-      <BaseTag :color="statusColor">{{ statusLabel[project.status] }}</BaseTag>
+      <div class="project-card__header-actions">
+        <BaseTag :color="statusColor">{{ statusLabel[project.status] }}</BaseTag>
+        <button
+          type="button"
+          class="project-card__archive-btn"
+          :title="isArchived ? t('projects.card.unarchiveAction') : t('projects.card.archiveAction')"
+          :aria-label="isArchived ? t('projects.card.unarchiveAction') : t('projects.card.archiveAction')"
+          @click.stop.prevent="toggleArchive"
+        >
+          <!-- Archive box icon (when project is active) -->
+          <svg
+            v-if="!isArchived"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="2" y="4" width="20" height="5" rx="1" />
+            <path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9" />
+            <line x1="10" y1="13" x2="14" y2="13" />
+          </svg>
+          <!-- Rotate / reactivate icon (when project is archived) -->
+          <svg
+            v-else
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 12a9 9 0 1 0 3-6.7" />
+            <polyline points="3 4 3 10 9 10" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Row 2: description -->
@@ -214,6 +267,39 @@ const sprintFooterText = computed(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.project-card__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.project-card__archive-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.project-card__archive-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-light);
+  background-color: var(--color-bg-hover);
+}
+
+.project-card__archive-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .project-card__title {

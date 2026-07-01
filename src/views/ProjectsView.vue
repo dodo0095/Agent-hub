@@ -1,14 +1,30 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useProjectsStore } from '../stores/projects';
 import ProjectCard from '../components/project/ProjectCard.vue';
 import ProjectCreateModal from '../components/project/ProjectCreateModal.vue';
 import BaseButton from '../components/common/BaseButton.vue';
 
+type ProjectFilter = 'active' | 'archived' | 'all';
+
 const { t } = useI18n();
 const projectsStore = useProjectsStore();
 const showCreateModal = ref(false);
+const currentFilter = ref<ProjectFilter>('active');
+
+const filterOptions: { value: ProjectFilter; labelKey: string }[] = [
+  { value: 'active', labelKey: 'projects.filter.active' },
+  { value: 'archived', labelKey: 'projects.filter.archived' },
+  { value: 'all', labelKey: 'projects.filter.all' },
+];
+
+const visibleProjects = computed(() => {
+  const all = projectsStore.projects;
+  if (currentFilter.value === 'active') return all.filter((p) => p.status !== 'archived');
+  if (currentFilter.value === 'archived') return all.filter((p) => p.status === 'archived');
+  return all;
+});
 
 onMounted(async () => {
   await projectsStore.fetchAll();
@@ -35,10 +51,26 @@ async function handleCreate(params: { name: string; description: string; templat
       </BaseButton>
     </div>
 
+    <!-- Filter tabs -->
+    <div class="projects-tabs" role="tablist">
+      <button
+        v-for="option in filterOptions"
+        :key="option.value"
+        type="button"
+        role="tab"
+        class="projects-tab"
+        :class="{ 'projects-tab--active': currentFilter === option.value }"
+        :aria-selected="currentFilter === option.value"
+        @click="currentFilter = option.value"
+      >
+        {{ t(option.labelKey) }}
+      </button>
+    </div>
+
     <!-- Project grid -->
     <div class="projects-grid">
       <ProjectCard
-        v-for="project in projectsStore.projects"
+        v-for="project in visibleProjects"
         :key="project.id"
         :project="project"
         :stats="projectsStore.projectStats[project.id] ?? null"
@@ -89,6 +121,44 @@ async function handleCreate(params: { name: string; description: string; templat
   font-weight: 600;
   color: var(--color-text-primary);
   flex: 1;
+}
+
+.projects-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 20px;
+  flex-shrink: 0;
+  margin-top: -8px;
+}
+
+.projects-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.projects-tab:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-light);
+  background-color: var(--color-bg-hover);
+}
+
+.projects-tab--active {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent);
+  background-color: var(--color-bg-card);
+}
+
+.projects-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .projects-grid {

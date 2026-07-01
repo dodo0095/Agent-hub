@@ -322,7 +322,14 @@
       "createdToday": "Created today",
       "createdYesterday": "Created yesterday",
       "createdDaysAgo": "Created {n} days ago",
-      "createdWeeksAgo": "Created {n} weeks ago"
+      "createdWeeksAgo": "Created {n} weeks ago",
+      "archiveAction": "Archive project",
+      "unarchiveAction": "Reactivate"
+    },
+    "filter": {
+      "active": "Active",
+      "archived": "Archived",
+      "all": "All"
     }
   },
   "taskboard": {

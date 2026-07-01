@@ -322,7 +322,14 @@
       "createdToday": "今日建立",
       "createdYesterday": "昨日建立",
       "createdDaysAgo": "{n} 天前建立",
-      "createdWeeksAgo": "{n} 週前建立"
+      "createdWeeksAgo": "{n} 週前建立",
+      "archiveAction": "關閉此專案",
+      "unarchiveAction": "重新啟用"
+    },
+    "filter": {
+      "active": "啟用中",
+      "archived": "已關閉",
+      "all": "全部"
     }
   },
   "taskboard": {

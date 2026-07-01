@@ -71,6 +71,15 @@ const effectiveProjectId = computed(() =>
   props.preselectedProjectId || selectedProjectId.value || projectsStore.selectedProjectId || null,
 );
 
+/** Projects visible in the launcher dropdown: hide archived, but keep the
+ *  currently effective project (remix / preselected) so the select never
+ *  ends up with a missing option. */
+const availableProjects = computed(() =>
+  projectsStore.projects.filter(
+    (p) => p.status !== 'archived' || p.id === effectiveProjectId.value,
+  ),
+);
+
 /** Non-done tasks, flat list (used when a project is selected) */
 const filteredTasks = computed(() =>
   availableTasks.value.filter((t) => t.status !== 'done'),
@@ -303,7 +312,7 @@ function onAgentChange(value: string) {
         :new-project-template="newProjectTemplate"
         :creating-project="creatingProject"
         :template-options="templateOptions"
-        :projects="projectsStore.projects"
+        :projects="availableProjects"
         :selected-task-id="selectedTaskId"
         :filtered-tasks="filteredTasks"
         :tasks-by-project="tasksByProject"
