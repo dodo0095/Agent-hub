@@ -190,6 +190,17 @@ npm run lint         # ESLint 程式碼檢查
 
 ## 更新日誌
 
+### 2026-07-02 — 專案啟用/關閉切換
+
+- **重用 archived 狀態當「關閉」** — 不做 DB migration，直接用既有的 `archived` 欄位切換啟用狀態
+- **ProjectCard 快捷操作** — 卡片右上角新增封存 / 還原 icon 按鈕，`.stop.prevent` 防止誤觸卡片導航
+- **ProjectsView 分頁 tab** — 「啟用中 / 已關閉 / 全部」三個分頁，預設顯示啟用中
+- **SessionLauncher 自動過濾** — 啟動 Session 選單自動排除 archived 專案；但 preselected / remix 綁定的專案仍保留，避免選單缺項
+- **i18n 同步** — `zh-TW` + `en` 新增 `archiveAction` / `unarchiveAction` / `filter.*` 詞條
+- **老闆需求** — 工作時關閉的專案不會出現在選單，減少干擾
+
+---
+
 ### 2026-05-28 — Sprint 5 完成：跨 Agent SendMessage MCP 工具 + Cost Backfill 強化
 
 #### Sprint 5：Agent 互傳工具（MCP SendMessage）
