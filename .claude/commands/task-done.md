@@ -51,6 +51,14 @@ allowed-tools: Read, Edit, Glob
    - 將所有已完成的項目打勾：`- [ ]` → `- [x]`
    - **如果有項目無法確認完成，必須在備註中說明，不可跳過**
 
+2b. **完成證據（必要，源自 PM-011 三次假修復教訓）**：
+   在任務檔案追加 `## 完成證據` 區塊，逐條列出**本次實際執行過**的驗證（不是「應該會過」的推論）：
+   - **程式碼變更**：貼上實際跑過的指令與結果摘要（如 `npx vitest run tests/xxx → 19 passed`、`npm run typecheck → exit 0`）
+   - **資料/紀錄類修復**（cost、統計、log）：必須附 production DB / 實際資料的 query 結果，證明修復後資料真的變了。單元測試綠不算數
+   - **需要重新 build 才生效的變更**（electron/**）：確認 `out/` build 時間戳新於原始碼，或註明「未重 build，生效需 npm run build」
+   - **檢查分支基底**：production 修復必須以 main 為 base；確認 fix 所在分支會被 merge 到用戶實際跑的版本
+   > 鐵律：**沒有貼得出來的證據 = 沒有完成**。寧可寫「未驗證」也不可寫推論當事實。
+
 3. **取得真實時間（必要，不可跳過）**：
 !`node -e "console.log(new Date().toISOString())"`
    > ⚠️ **禁止自行編造時間**。Agent 不知道真實時間，必須透過上述指令取得。將輸出存為變數 `$NOW` 供後續步驟使用。

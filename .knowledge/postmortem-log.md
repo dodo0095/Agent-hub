@@ -1,26 +1,41 @@
 # 踩坑紀錄
 
-> **版本**: v1.3
-> **最後更新**: 2026-05-28
+> **版本**: v1.4
+> **最後更新**: 2026-07-03
 
 ---
 
 ## 格式說明
 
 每條踩坑紀錄包含：ID、問題、根因、解法、預防措施。
+**修復閉環規則**：紀錄中若含「待後續處理」項目，必須同時建 `.tasks/backlog/PM-{id}-*.md` 任務檔（見 `/pitfall-record` 步驟 4）。
 
 ---
 
 ## 踩坑快速參考
 
-| 場景 | 規則 |
-|------|------|
-| `node-pty` 編譯 | 需要 Visual Studio Build Tools。`npx electron-rebuild -f -w node-pty` |
-| 新增 IPC 通道 | `ipc.ts` → `preload.ts` → `useIpc.ts` 三方同步 |
-| 修改 Pinia store | 確認 `useIpc()` 有暴露對應 IPC wrapper |
-| 修改 DB schema | 必須在 database.ts migrations 新增版本 |
-| 循環依賴 | service 之間用 lazy `require()` 避免 |
-| TailwindCSS 4 | 用 `@theme` 定義 token，不用 `tailwind.config.js` |
+> 這張表是弱模型每次真正會讀的部分。新增踩坑時把教訓濃縮成一行加進來（`/pitfall-record` 步驟 5）。
+
+| 場景 | 規則 | 出處 |
+|------|------|------|
+| `node-pty` 編譯 | 需要 Visual Studio Build Tools。`npx electron-rebuild -f -w node-pty` | PM-001 |
+| 新增 IPC 通道 | `ipc.ts` → `preload.ts` → `useIpc.ts` → `env.d.ts` 四方同步（有 hook 提醒） | PM-002 |
+| 修改 Pinia store | 確認 `useIpc()` 有暴露對應 IPC wrapper | PM-002 |
+| 修改 DB schema | 必須在 database.ts migrations 新增版本 | — |
+| 循環依賴 | service 之間用 lazy `require()` 避免 | PM-003 |
+| TailwindCSS 4 | 用 `@theme` 定義 token，不用 `tailwind.config.js` | — |
+| subprocess 傳參 | 關鍵路徑用 CLI 參數傳，不依賴 env var 繼承（Windows ConPTY 不繼承） | PM-004 |
+| Claude Code `--settings` | 只有 `permissions` 會被合併，`statusLine` 被靜默丟棄；用 `--debug --debug-file` + unique marker 驗證設定真的被接收 | PM-010 |
+| cost / 紀錄類修復 | **必須 query production DB 證實資料真的變了才算修好**；unit test 綠不算數 | PM-011 |
+| 改 `electron/**` 後 | 必須 `npm run build`，否則 app 跑舊 bundle；宣告修復前確認 `out/` 時間戳 | PM-011 |
+| production 修復分支 | 一律以 main 為 base 開新分支，不在舊 feature branch 上修 | PM-011 |
+| 長時累計指標（cost/token） | 必須週期性落 DB，不可只在 session end 寫入 | PM-011 |
+| 同一 bug 第三次出現 | 停下來，從頭驗整條 pipeline 的每一段，不要再修單點 | PM-011 |
+| 宣告任務完成 | 附實際執行過的驗證證據（`/task-done` 步驟 2b），沒有證據 = 沒有完成 | PM-011 |
+| 新增/修改 hook | 攔截邏輯抽成可 export 函數 + false-positive 測試；hook 內呼叫 npm/git 用完整路徑；改完跑 `node scripts/smoke-test-hooks.cjs` | PM-009/013 |
+| hook 永遠 block 或永遠 pass | 警報失效，最高優先修（`/harness-audit` 原則 7） | PM-013 |
+| system prompt 宣告工具 | 必須先確認 harness 真的部署了該工具 | PM-006 |
+| 全套測試 | `npm test` 有 31 個預存失敗（PM-012 待修）；驗收時跑相關檔案測試並註明範圍 | PM-012 |
 
 ---
 
@@ -150,10 +165,10 @@
 - **症狀**: PM 試圖跑 `for f in ... pre-deploy.md ...; do sed -i ...; done` 處理 PM-007 → 被 hook 擋 `G5 Pre-Deploy: typecheck 或 build 失敗，禁止部署`
 - **根因**: regex 把「字串裡有 deploy」等同於「正在執行部署」，但實際部署應該是**特定動詞 + 部署目標**（如 `npm run deploy`、`vercel --prod`、`docker push <registry>`、`gh release create`）
 - **暫時迴避**: 改用 Node inline script `node -e "..."` 處理檔案，命令字串不含 deploy / publish / release 字眼
-- **修復方向（待後續 Sprint）**:
-  - 收斂 regex 為 `/(?:^|\s)(npm run deploy|vercel\s+(?:--prod|deploy)|docker\s+push|gh\s+release\s+create)/`
-  - 或改為 OR 條件：必須同時含「部署動詞」**與**「目標位置」才視為部署
-  - 加單元測試覆蓋至少 10 種 false-positive 場景（如 sed pre-deploy.md / cat release-notes.md / grep deploy / cd deployments）
+- **修復（✅ 已解決，2026-07-03）**:
+  - regex 收斂為「部署動詞開頭」的明確 pattern 清單（npm/pnpm/yarn deploy、npm publish、vercel --prod、docker push、gh release create、firebase/netlify deploy、electron-builder --publish）
+  - `isDeployCommand()` 抽出為可測函數，`tests/hooks/g5-deploy-regex.test.ts` 覆蓋 12 個 false-positive + 15 個 true-positive 場景
+  - 同時修復第二個 bug：hook 用裸 `npm` 呼叫，但 hook 環境 PATH 沒有 npm → execSync throw → 被誤判為 typecheck/build 失敗 → deny 無辜指令。改用 `process.execPath` 完整路徑（同 stop-validator 的做法）
 - **預防**:
   - 新增 hook 時必須附帶 false-positive 測試清單
   - hook 攔截邏輯文件化：什麼情況該擋、什麼情況不該擋
@@ -256,3 +271,30 @@
   1. 把 31 個失敗拆三條 ticket：A) session-manager mock 修正；B) task-manager 測試對齊；C) @vue/test-utils 升級到 vitest 4 相容版
   2. 在 CI / pre-push hook 加 `npm test --run` 全套通過才能 merge，杜絕「紅了沒人發現」的長尾積壓
   3. 修完後重新確認 `tests/services/cost-backfill.test.ts` 仍綠（這次是 7/7 通過）
+
+### PM-013: stop-validator 永遠紅 — blocked 175 次 / passed 0 次的失效警報
+
+- **發現日期**: 2026-07-03（harness 制度總體檢時從 hook-execution.jsonl 統計發現）
+- **影響期間**: hook 部署以來的全部 session
+- **問題**: Stop hook 每次 session 結束都跑全套 `npm test`（含 PM-012 的 31 個預存失敗）+ `npm run lint`，歷史統計 **blocked 175 次、passed 0 次**。它從來沒綠過
+- **危害（比沒有 hook 更糟）**:
+  1. 每次 Stop 浪費數分鐘跑注定失敗的全套測試
+  2. 所有 agent 被訓練成「紅燈是常態，忽略它」——警報失去信號價值，等真的弄壞東西時沒人會注意
+  3. `stop_hook_active` 遞迴保護讓第二次 Stop 靜默放行，agent 學到「再按一次就過了」
+- **根因**:
+  1. 把「全套測試綠」這個 G3 gate 等級的標準塞進每次 Stop 都跑的 hook，但基準線（PM-012）本來就是紅的 → 警報必響
+  2. 缺乏「警報有效性」的審計制度：/harness-audit 只檢查 hook 存在與否，不檢查 block/pass 比例
+- **解法（✅ 已解決，2026-07-03）**:
+  1. stop-validator 重寫為增量式：working tree 乾淨 → 直接放行；只動文件 → 放行；有程式碼變更 → 只跑 lint + typecheck（基準線為綠的檢查，快且真的能抓到「這個 session 弄壞了東西」）
+  2. 全套測試的守門責任明確歸屬 G2/G3 gate（/review、CI），不在 Stop hook
+  3. /harness-audit 新增原則 7「警報有效性」：block 率 100% 或 0% 的 hook = 失效警報，最高優先修
+  4. 新增 `scripts/smoke-test-hooks.cjs`：修改任何 hook 後必跑的煙霧測試
+  5. hook-execution.jsonl 加 1MB 輪替，避免無限增長
+- **驗證**:
+  - `tests/hooks/` 44 個判定測試全綠（g5 regex 27 + verify-clone 保護 17）
+  - `node scripts/smoke-test-hooks.cjs` 7/7 通過（含新 hook 真實 payload deny/pass 行為）
+  - 新 protect-verify-clone hook 註冊當下即攔截到本 session 一條含 verify-clone 路徑的寫入指令（live 驗證）
+- **預防**:
+  - **警報設計鐵律**：任何會 block 的自動檢查，部署前必須確認「目前基準線能過」。基準線紅的檢查只能當 gate 驗收項，不能當常駐警報
+  - /harness-audit 原則 7 制度化定期檢查 block/pass 比例
+  - 踩坑紀錄的「待修」項目必須建 backlog 任務（/pitfall-record 步驟 4），否則像 PM-009 一樣躺 2 個月

@@ -11,6 +11,10 @@
           {
             "type": "command",
             "command": "\"/c/Program Files/nodejs/node\" .claude/hooks/g5-pre-deploy.js"
+          },
+          {
+            "type": "command",
+            "command": "\"/c/Program Files/nodejs/node\" .claude/hooks/protect-verify-clone.js"
           }
         ]
       },
@@ -20,6 +24,15 @@
           {
             "type": "command",
             "command": "\"/c/Program Files/nodejs/node\" .claude/hooks/g1-design-check.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/c/Program Files/nodejs/node\" .claude/hooks/protect-verify-clone.js"
           }
         ]
       }

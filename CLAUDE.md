@@ -74,6 +74,8 @@ npm run typecheck    # TypeScript 型別檢查
 npm run build        # 打包
 ```
 
+> **修改 `.claude/hooks/*.js` 的鐵律**（PM-009/PM-013）：攔截邏輯必須抽成可 export 函數並在 `tests/hooks/` 加 false-positive 測試；改完必跑 `npx vitest run tests/hooks/` + `node scripts/smoke-test-hooks.cjs`。hook 內呼叫 npm/git 一律用完整路徑（hook 環境 PATH 沒有 npm）。
+
 ---
 
 ## 專案文件索引

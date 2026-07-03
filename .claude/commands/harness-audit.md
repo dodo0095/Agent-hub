@@ -48,9 +48,22 @@ allowed-tools: Read, Glob, Grep, Bash
 - [ ] .knowledge/ 下各文件最後修改日期
 - [ ] 超過 30 天未更新的文件標記為「可能過時」
 
-### 原則 7: 整體評分
+### 原則 7: 警報有效性（2026-07-03 新增，源自 PM-013）
+
+> 一個永遠響的警報和一個永遠不響的警報一樣沒用——前者教 agent 忽略紅燈，後者給人虛假安全感。
+
+- [ ] 統計 `.claude/hook-execution.jsonl` 各 hook 的 blocked / passed / warned 次數：
+  ```
+  grep -o '"hook":"[a-z0-9-]*","type":"[A-Za-z]*","result":"[a-z]*"' .claude/hook-execution.jsonl | sort | uniq -c
+  ```
+- [ ] 任何 hook 的 block 率 = 100%（從未 pass）→ **失效警報**，最高優先修復（歷史案例：stop-validator 曾 blocked 175 / passed 0）
+- [ ] 任何「會攔截」的 hook block 率 = 0% 且樣本 > 200 → 檢查是否形同虛設或 regex 永不匹配
+- [ ] 抽查最近 5 筆 blocked 紀錄，確認是真違規而非 false positive（歷史案例：PM-009 g5 regex 過寬）
+- [ ] hook 內部執行的指令（npm / git）是否用完整路徑（hook 環境 PATH 沒有 npm，裸呼叫 = 必失敗被誤判）
+
+### 原則 8: 整體評分
 - 每個原則 0-2 分（0=缺失, 1=部分, 2=完善）
-- 總分 /14，≥10 = 健康，7-9 = 需改善，<7 = 警告
+- 總分 /16，≥12 = 健康，8-11 = 需改善，<8 = 警告
 
 ## 輸出格式
 
@@ -70,7 +83,8 @@ allowed-tools: Read, Glob, Grep, Bash
 | 4. 技能覆蓋 | {0-2} | {detail} |
 | 5. Hook 健康 | {0-2} | {detail} |
 | 6. 文件新鮮度 | {0-2} | {detail} |
-| 7. 整體完整性 | {0-2} | {detail} |
+| 7. 警報有效性 | {0-2} | {detail} |
+| 8. 整體完整性 | {0-2} | {detail} |
 
 ## 行動項目
 1. {highest priority action}

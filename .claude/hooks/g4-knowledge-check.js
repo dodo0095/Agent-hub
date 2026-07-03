@@ -28,6 +28,31 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
+  // IPC 四方同步檢查（PM-002 預防措施，2026-07-03 落地）：
+  // 動到 IPC 鏈任何一環，提醒四方檔案清單，缺一不可
+  const IPC_CHAIN = [
+    'electron/types/ipc.ts',
+    'electron/preload.ts',
+    'src/composables/useIpc.ts',
+    'src/env.d.ts'
+  ];
+  const normalized = filePath.replace(/\\/g, '/');
+  const touchedIpc = IPC_CHAIN.find(p => normalized.endsWith(p));
+  if (touchedIpc) {
+    const others = IPC_CHAIN.filter(p => p !== touchedIpc);
+    logHook('warned', `IPC chain file changed: ${touchedIpc}`);
+    console.log(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext:
+          `⚠️ IPC 四方同步（PM-002）: 你修改了 ${touchedIpc}。` +
+          `新增/修改 IPC 通道時，以下檔案必須同步更新，缺一會 runtime 崩潰：${others.join(', ')}。` +
+          `請逐一確認後再繼續。`
+      }
+    }));
+    process.exit(0);
+  }
+
   // Only trigger for architecture-critical directories
   if (!/electron[/\\](services|ipc|migrations|types)[/\\]/.test(filePath)) {
     logHook('passed', 'non-critical path');
