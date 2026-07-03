@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -94,22 +94,23 @@ describe('SkillTab integration', () => {
   });
 
   // ── onEditSkill ───────────────────────────────────────
-  it('onEditSkill 呼叫 selectSkill 並觸發 DetailPanel enterEditMode', async () => {
+  it('onEditSkill 呼叫 selectSkill 並讓 DetailPanel 進入 edit mode', async () => {
     // 給 DetailPanel 一個 skill 讓 edit mode 可以渲染
     mockStoreInstance.selectedSkill = userSkill;
     const wrapper = mountTab();
 
-    // spy on exposed enterEditMode
     const detailPanel = wrapper.findComponent(SkillDetailPanel);
-    const enterEditModeSpy = vi.spyOn(detailPanel.vm as { enterEditMode: () => void }, 'enterEditMode');
+    expect(detailPanel.find('textarea').exists()).toBe(false); // 初始為 preview mode
 
     // 由 SkillList emit edit 事件觸發 onEditSkill
     await wrapper.findComponent({ name: 'SkillList' }).vm.$emit('edit', userSkill);
-    await wrapper.vm.$nextTick();
-    await wrapper.vm.$nextTick(); // 等 selectSkill resolved + nextTick
+    // onEditSkill 內有兩層 await，固定次數 $nextTick 會 race，flush 到所有 microtask 結束
+    await flushPromises();
 
     expect(mockSelectSkill).toHaveBeenCalledWith('my-skill', 'global', undefined);
-    expect(enterEditModeSpy).toHaveBeenCalled();
+    // 不 spy exposed method（Vue 3.5 expose proxy 攔不到父層 template ref 的呼叫），
+    // 改斷言可觀察行為：進入 edit mode = textarea 出現
+    expect(detailPanel.find('textarea').exists()).toBe(true);
   });
 
   // ── Delete ────────────────────────────────────────────

@@ -169,7 +169,12 @@ const mockMaestro = {
   },
 };
 
-Object.defineProperty(globalThis, 'window', {
-  value: { maestro: mockMaestro },
-  writable: true,
-});
+// PM-012 C 類根因：舊寫法把 happy-dom 的 window 整顆替換成 { maestro }，
+// 導致 window.Event / window.performance 等原生介面消失，
+// @vue/test-utils 的 trigger()（SupportedEventInterface）與 vue-i18n dev mode（performance.now）全炸。
+// 正確做法：只「掛上」mock，不替換 window。
+if (typeof window === 'undefined') {
+  // node 環境的 service 測試（@vitest-environment node）沒有 window，建最小替身
+  Object.defineProperty(globalThis, 'window', { value: {}, writable: true });
+}
+(window as unknown as { maestro: typeof mockMaestro }).maestro = mockMaestro;

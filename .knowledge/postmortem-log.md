@@ -35,7 +35,10 @@
 | 新增/修改 hook | 攔截邏輯抽成可 export 函數 + false-positive 測試；hook 內呼叫 npm/git 用完整路徑；改完跑 `node scripts/smoke-test-hooks.cjs` | PM-009/013 |
 | hook 永遠 block 或永遠 pass | 警報失效，最高優先修（`/harness-audit` 原則 7） | PM-013 |
 | system prompt 宣告工具 | 必須先確認 harness 真的部署了該工具 | PM-006 |
-| 全套測試 | `npm test` 有 31 個預存失敗（PM-012 待修）；驗收時跑相關檔案測試並註明範圍 | PM-012 |
+| 全套測試 | 基準線已清零（2026-07-03，359/359 綠）。**紅 = 你弄壞了東西，必須修，不可視為預存** | PM-012 |
+| happy-dom 測試環境 | 只「掛上」mock 到 window，**絕不整顆替換 window**（會毀掉 Event/performance 等原生介面） | PM-012 |
+| mock DB 查詢 | 用 SQL-aware `mockImplementation`，不用 `mockReturnValueOnce` 佇列（會把實作私有呼叫順序寫死進測試） | PM-012 |
+| 測 exposed method | 不 `vi.spyOn` exposed proxy（Vue 3.5 攔不到 template ref 呼叫），改斷言可觀察 DOM 行為 | PM-012 |
 
 ---
 
@@ -251,7 +254,7 @@
 
 - **發現日期**: 2026-05-28（tech-lead 在 PM-011 收尾時跑全套測試發現）
 - **影響範圍**: `npm test --run` 31 個 case 失敗（5 個檔案），無關 cost / backfill / 任何 PM-011 改動。在 origin/main 上重現 → 證實為預存問題
-- **狀態**: 🟡 待處理（未排 Sprint，需要老闆決定優先級）
+- **狀態**: ✅ 已解決（2026-07-03，老闆排期後 tech-lead 修復，359/359 全綠，詳見本條末尾「實際修復」）
 - **三類失敗模式**:
   1. **`tests/services/session-manager.test.ts`（10 failed / 33 total）**
      - 錯誤：`TypeError: () => ({feed: vi.fn(...), flush: vi.fn(), reset: ...}) is not a constructor`，發生在 `session-manager.ts:274:25`
@@ -298,3 +301,11 @@
   - **警報設計鐵律**：任何會 block 的自動檢查，部署前必須確認「目前基準線能過」。基準線紅的檢查只能當 gate 驗收項，不能當常駐警報
   - /harness-audit 原則 7 制度化定期檢查 block/pass 比例
   - 踩坑紀錄的「待修」項目必須建 backlog 任務（/pitfall-record 步驟 4），否則像 PM-009 一樣躺 2 個月
+- **實際修復（2026-07-03，與 5/28 的推測比對）**:
+  1. **A 類 session-manager（10 failed）**: 推測方向對、主角錯——不是 `Terminal`，是 `EventParser` mock。vitest 4 對 `new mockFn()` 走 `Reflect.construct`，arrow function 實作不可建構。改為真 class mock 一發修復（33/33 綠）
+  2. **B 類 task-manager（4 failed）**: 不是 `transition()` 行為改變，是測試用 `mockReturnValueOnce` 佇列把實作的私有 DB 呼叫「順序」寫死，實作多一次查詢（write-back / 9C/9D）整串錯位。改為 SQL-aware `mockImplementation`（依查詢內容回應＋追蹤 UPDATE 狀態），與呼叫順序徹底解耦（19/19 綠）
+  3. **C 類 @vue/test-utils（17 failed）**: 推測的「版本不相容」只是表象。真根因是 `tests/setup.ts` 把 happy-dom 的 window **整顆替換**成 `{ maestro }`，毀掉 `window.Event`（→ SupportedEventInterface 炸）與 `window.performance`（→ vue-i18n 炸）。改為只掛 mock 不替換 window＋升級 @vue/test-utils 2.4.6→2.4.11（2.5 不存在，5/28 的社群資訊過時）。另修一個 `vi.spyOn` exposed proxy 攔不到 template ref 呼叫的測試，改斷言可觀察 DOM 行為（17/17 綠）
+  4. **CI 守門恢復**: test.yml 其實一直有跑全套（`test:unit`），但只在 push main 觸發——agent 分支不觸發、紅了沒人看。加入 `agent/**` / `feature/**` 觸發；順修 lint job copy-paste 錯誤（原本誤跑 typecheck）
+  5. **Stop hook 決策**: 全套測試**不**加回 Stop hook（維持 lint+typecheck 快檢），全套守門交給 CI——警報分層：快的常駐、慢的進 gate
+- **驗證**: `npm test` → **Test Files 23 passed (23), Tests 359 passed (359)**；lint 0 errors；typecheck exit 0
+- **教訓**: 三類推測有兩類只對表象。修復前先重現、看實際錯誤訊息，5 週前的診斷筆記只能當線索不能當結論

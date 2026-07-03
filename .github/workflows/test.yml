@@ -1,8 +1,12 @@
 name: Test
 
+# PM-012 修復（2026-07-03）：
+# 1. 觸發範圍加入 agent/**——過去 agent 分支不觸發 CI，全套測試紅了 20 天沒人發現
+# 2. lint job 原本誤跑 typecheck（copy-paste 錯誤），改回 npm run lint
+# 3. 全套測試基準線已清零（359/359 綠），此 workflow 恢復守門效力：紅 = 你弄壞了東西
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'agent/**', 'feature/**']
   pull_request:
     branches: [main, master]
 
@@ -39,4 +43,4 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm run typecheck
+      - run: npm run lint

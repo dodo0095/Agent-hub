@@ -141,18 +141,29 @@ describe('TaskManager', () => {
     });
   });
 
+  /**
+   * SQL-aware DB mock：依查詢內容回應、追蹤 UPDATE 後的狀態。
+   * 不用 mockReturnValueOnce 佇列 —— 那會把實作的私有 DB 呼叫「順序」寫死進測試，
+   * 實作多一次查詢整串就錯位（PM-012 B 類根因）。
+   */
+  const mockTaskDb = (initialStatus: string, rowOverrides: Record<string, unknown> = {}) => {
+    let status = initialStatus;
+    mockDb.run.mockImplementation((sql: unknown, params: unknown[] = []) => {
+      if (typeof sql === 'string' && sql.startsWith('UPDATE tasks SET status')) {
+        status = params[0] as string;
+      }
+    });
+    mockDb.prepare.mockImplementation((sql: unknown) => {
+      if (typeof sql === 'string' && sql.includes('FROM tasks t')) {
+        return [makeTaskRow({ ...rowOverrides, status })];
+      }
+      return []; // task_dependencies / projects / sprints / claude_sessions → 空
+    });
+  };
+
   describe('transition', () => {
     it('transitions a task from created to assigned', () => {
-      mockDb.prepare
-        .mockReturnValueOnce([makeTaskRow({ status: 'created' })])  // getById in transition
-        .mockReturnValueOnce([])                                     // getDependencies
-        // appendTaskEvent calls:
-        .mockReturnValueOnce([makeTaskRow({ status: 'assigned' })]) // getById in appendTaskEvent
-        .mockReturnValueOnce([])                                     // getDependencies
-        .mockReturnValueOnce([])                                     // getTaskRecordDir → project work_dir (skip)
-        // final getById:
-        .mockReturnValueOnce([makeTaskRow({ status: 'assigned' })]) // getById at end of transition
-        .mockReturnValueOnce([]);                                    // getDependencies
+      mockTaskDb('created');
 
       const result = taskManager.transition({ taskId: 'task-1', toStatus: 'assigned' });
 
@@ -182,16 +193,7 @@ describe('TaskManager', () => {
     });
 
     it('transitions in_progress to blocked', () => {
-      mockDb.prepare
-        .mockReturnValueOnce([makeTaskRow({ status: 'in_progress' })])  // getById in transition
-        .mockReturnValueOnce([])                                         // getDependencies
-        // appendTaskEvent calls:
-        .mockReturnValueOnce([makeTaskRow({ status: 'blocked' })])      // getById in appendTaskEvent
-        .mockReturnValueOnce([])                                         // getDependencies
-        .mockReturnValueOnce([])                                         // getTaskRecordDir → project work_dir
-        // final getById:
-        .mockReturnValueOnce([makeTaskRow({ status: 'blocked' })])      // getById at end of transition
-        .mockReturnValueOnce([]);                                        // getDependencies
+      mockTaskDb('in_progress');
 
       const result = taskManager.transition({ taskId: 'task-1', toStatus: 'blocked' });
 
@@ -263,37 +265,14 @@ describe('TaskManager', () => {
 
   describe('9B: expanded state machine', () => {
     it('allows created → in_progress transition', () => {
-      mockDb.prepare
-        .mockReturnValueOnce([makeTaskRow({ status: 'created' })])  // getById in transition
-        .mockReturnValueOnce([])                                     // getDependencies
-        // appendTaskEvent:
-        .mockReturnValueOnce([makeTaskRow({ status: 'in_progress' })])
-        .mockReturnValueOnce([])
-        .mockReturnValueOnce([])                                     // getTaskRecordDir
-        // final getById:
-        .mockReturnValueOnce([makeTaskRow({ status: 'in_progress' })])
-        .mockReturnValueOnce([]);
+      mockTaskDb('created');
 
       const result = taskManager.transition({ taskId: 'task-1', toStatus: 'in_progress' });
       expect(result.status).toBe('in_progress');
     });
 
     it('allows in_progress → done transition', () => {
-      mockDb.prepare
-        .mockReturnValueOnce([makeTaskRow({ status: 'in_progress' })])  // getById in transition
-        .mockReturnValueOnce([])                                         // getDependencies
-        // appendTaskEvent:
-        .mockReturnValueOnce([makeTaskRow({ status: 'done' })])
-        .mockReturnValueOnce([])
-        .mockReturnValueOnce([])                                         // getTaskRecordDir
-        // triggerSummaryForTask → DB query for sessions:
-        .mockReturnValueOnce([])
-        // 9C: getById to check sprint:
-        .mockReturnValueOnce([makeTaskRow({ status: 'done', sprint_id: null })])
-        .mockReturnValueOnce([])
-        // final getById:
-        .mockReturnValueOnce([makeTaskRow({ status: 'done' })])
-        .mockReturnValueOnce([]);
+      mockTaskDb('in_progress', { sprint_id: null });
 
       const result = taskManager.transition({ taskId: 'task-1', toStatus: 'done' });
       expect(result.status).toBe('done');

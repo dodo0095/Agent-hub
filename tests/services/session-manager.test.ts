@@ -79,13 +79,15 @@ vi.mock('../../electron/services/git-manager', () => ({
   },
 }));
 
+// vitest 4 對 `new mockFn()` 走 Reflect.construct，arrow function 實作不可建構（PM-012 A 類根因）
+// EventParser 在 session-manager.ts 以 `new EventParser()` 使用，mock 必須是真的 class
 vi.mock('../../electron/services/event-parser', () => ({
-  EventParser: vi.fn(() => ({
-    feed: vi.fn(() => []),
-    flush: vi.fn(),
-    reset: vi.fn(),
-    on: vi.fn(),
-  })),
+  EventParser: class {
+    feed = vi.fn(() => []);
+    flush = vi.fn();
+    reset = vi.fn();
+    on = vi.fn();
+  },
 }));
 
 vi.mock('../../electron/services/hook-manager', () => ({
