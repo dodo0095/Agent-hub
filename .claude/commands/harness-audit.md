@@ -22,11 +22,15 @@ allowed-tools: Read, Glob, Grep, Bash
 - [ ] CLAUDE.md 行數 ≤ 100（超過 = 警告）
 - [ ] CLAUDE.md 有文件索引且索引完整
 - [ ] .knowledge/ 文件都在索引中登記
+- [ ] SessionStart 注入鏈完好：`.claude/hooks/session-start-context.js` 已在 settings.json 註冊；postmortem-log.md 有 `QUICKREF:START/END` 標記、decision-tables.md 有 `INJECT:START/END` 標記；實跑 `node .claude/hooks/session-start-context.js < /dev/null` 有輸出 additionalContext
+- [ ] 注入段沒有膨脹（hook log 中 injected chars 未逼近 6000 上限）
 
 ### 原則 2: 架構約束（用工具強制不靠 prompt）
 - [ ] 掃描 CLAUDE.md 中的「禁止」「不得」等文字規則
 - [ ] 檢查是否有對應 Hook 強制（.claude/settings.json）
 - [ ] 未被 Hook 覆蓋的文字規則列出建議
+- [ ] 決策表覆蓋：`.knowledge/decision-tables.md` 存在且在 CLAUDE.md 索引；最近的踩坑（postmortem 新條目）若含「判斷類」教訓，已改寫進對應決策表
+- [ ] `scripts/preflight.cjs` 存在且實跑 exit 0/1 行為正常（証據制度的機械底座）
 
 ### 原則 3: 知識層級（公司 vs 專案）
 - [ ] .knowledge/company-rules.md 存在
@@ -72,7 +76,7 @@ allowed-tools: Read, Glob, Grep, Bash
 
 **專案**: {project-name}
 **日期**: {today}
-**總分**: {score}/14
+**總分**: {score}/16
 
 ## 評分明細
 | 原則 | 分數 | 說明 |

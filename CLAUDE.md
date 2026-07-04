@@ -25,7 +25,7 @@
 
 ---
 
-## 最高原則（3 條致命規則）
+## 最高原則（4 條致命規則）
 
 1. **文件就是法律** — 程式碼必須與規範文件一致，不一致以文件為準。
    → 完整 8 條規則見 `.knowledge/doc-governance.md`
@@ -34,7 +34,10 @@
    → 詳見 `.knowledge/architecture.md`「IPC 三方一致規則」
 
 3. **不確定就去讀，不要猜** — 不得憑空想像任何資料結構或 API 格式。
-   → 真相來源表見 `.knowledge/coding-standards.md`「禁止憑空想像規則」
+   → 真相來源表見 `.knowledge/coding-standards.md`「禁止憑空想像規則」＋ `.knowledge/decision-tables.md` 表 4
+
+4. **完成 = 證據** — 宣告完成前跑 `node scripts/preflight.cjs` 並貼輸出；證據等級查 `.knowledge/decision-tables.md` 表 1。
+   → 需要「判斷」的時刻（除錯熔斷、升級、警報回應）一律先查決策表，不靠感覺
 
 > ※ 危險指令已由 PreToolUse Hook 強制攔截（kill-port / --no-verify / force push main），見 `.claude/settings.json`
 
@@ -72,6 +75,7 @@ npm run test         # 單元測試
 npm run lint         # ESLint 檢查
 npm run typecheck    # TypeScript 型別檢查
 npm run build        # 打包
+node scripts/preflight.cjs   # 完成證據產生器（/task-done 前必跑）
 ```
 
 > **修改 `.claude/hooks/*.js` 的鐵律**（PM-009/PM-013）：攔截邏輯必須抽成可 export 函數並在 `tests/hooks/` 加 false-positive 測試；改完必跑 `npx vitest run tests/hooks/` + `node scripts/smoke-test-hooks.cjs`。hook 內呼叫 npm/git 一律用完整路徑（hook 環境 PATH 沒有 npm）。
@@ -84,6 +88,7 @@ npm run build        # 打包
 
 | 文件 | 用途 | 版本 |
 |------|------|------|
+| `.knowledge/decision-tables.md` | **決策表：證據等級、除錯熔斷、升級界線、警報回應**（判斷前先查） | v1.0 |
 | `.knowledge/project-overview.md` | 專案概述、目標、技術棧、v1→v2 變更摘要 | v1.1 |
 | `.knowledge/architecture.md` | 系統架構、服務清單、IPC 架構、三方一致規則 | v1.1 |
 | `.knowledge/directory-structure.md` | 目錄結構詳細說明 | v1.0 |
@@ -130,4 +135,6 @@ npm run build        # 打包
 | `.knowledge/company/templates/sprint-proposal.md.template` | Sprint 提案書範本 |
 | `.knowledge/company/templates/dev-plan.md.template` | 開發計畫書範本 |
 | `.knowledge/company/templates/internal-review.md.template` | 內部審查報告範本 |
+| `.knowledge/company/templates/decision-tables.md.template` | 決策表範本（判斷力機械化，配 SessionStart 注入 hook） |
+| `.knowledge/company/hook-templates/session-start-context.js.template` | SessionStart 教訓注入 hook 範本 |
 

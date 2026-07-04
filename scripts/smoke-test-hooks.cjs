@@ -51,6 +51,13 @@ const cases = [
     hook: 'forbidden-commands.js',
     payload: { tool_name: 'Bash', tool_input: { command: 'git commit --no-verify -m x' } },
     expectDeny: true
+  },
+  {
+    name: 'session-start: 注入決策表摘要 + 踩坑快速參考',
+    hook: 'session-start-context.js',
+    payload: { source: 'startup' },
+    expectDeny: false,
+    expectContext: '決策表核心摘要'
   }
 ];
 

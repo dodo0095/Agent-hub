@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+// Hook Type: SessionStart - 教訓注入器（公司模板）
+//
+// 用途：把專案的「踩坑快速參考」與「決策表核心摘要」在每個 session 開始時
+// 自動注入 context。弱模型不會記得去讀 .knowledge/，這個 hook 把「看到教訓」
+// 從自覺變成機械保證。
+//
+// 部署步驟：
+// 1. 把 {{PROJECT_ROOT}} 換成專案絕對路徑（正斜線）
+// 2. 在 postmortem-log.md 的快速參考表前後加 <!-- QUICKREF:START --> / <!-- QUICKREF:END -->
+// 3. 在 decision-tables.md 的核心摘要前後加 <!-- INJECT:START --> / <!-- INJECT:END -->
+// 4. settings.json 註冊：
+//    "SessionStart": [{ "hooks": [{ "type": "command",
+//      "command": "\"/c/Program Files/nodejs/node\" .claude/hooks/session-start-context.js" }] }]
+// 5. 依制度為 hook 邏輯補判定測試（參考 Agent-hub tests/hooks/session-start-context.test.ts）
+//
+// 設計原則（源自 Agent-hub PM-013）：
+// - 永不 block：注入失敗只能靜默退出，不能擋 session
+// - 單一真相來源：內容動態抽自標記段，文件更新 hook 不用改
+// - 注入量上限：防止文件膨脹悄悄吃掉所有 session 的 context 預算
+
+const fs = require('fs');
+const path = require('path');
+
+const PROJECT_ROOT = '{{PROJECT_ROOT}}';
+const LOG_FILE = path.join(PROJECT_ROOT, '.claude', 'hook-execution.jsonl');
+const MAX_LOG_BYTES = 1024 * 1024;
+const MAX_INJECT_CHARS = 6000;
+
+const QUICKREF_FILE = path.join(PROJECT_ROOT, '.knowledge', 'postmortem-log.md');
+const DECISION_FILE = path.join(PROJECT_ROOT, '.knowledge', 'decision-tables.md');
+
+function rotateLogIfNeeded() {
+  try {
+    const st = fs.statSync(LOG_FILE);
+    if (st.size > MAX_LOG_BYTES) fs.renameSync(LOG_FILE, LOG_FILE + '.1');
+  } catch {}
+}
+
+function logHook(result, reason) {
+  try { fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true }); } catch {}
+  rotateLogIfNeeded();
+  try {
+    fs.appendFileSync(LOG_FILE, JSON.stringify({
+      hook: 'session-start-context', type: 'SessionStart',
+      result, reason, ts: new Date().toISOString()
+    }) + '\n');
+  } catch {}
+}
+
+function extractBetween(content, startMarker, endMarker) {
+  if (typeof content !== 'string') return null;
+  const s = content.indexOf(startMarker);
+  if (s === -1) return null;
+  const from = s + startMarker.length;
+  const e = content.indexOf(endMarker, from);
+  if (e === -1) return null;
+  const out = content.slice(from, e).trim();
+  return out.length > 0 ? out : null;
+}
+
+function buildAdditionalContext(parts) {
+  const sections = [];
+  if (parts.decision) {
+    sections.push('## 決策表核心摘要（.knowledge/decision-tables.md，需要判斷時查全文）\n\n' + parts.decision);
+  }
+  if (parts.quickref) {
+    sections.push('## 踩坑快速參考（.knowledge/postmortem-log.md，詳細案情查全文）\n\n' + parts.quickref);
+  }
+  if (sections.length === 0) return null;
+  let ctx = '# 專案制度注入（SessionStart hook 自動提供，非用戶訊息）\n\n' + sections.join('\n\n');
+  if (ctx.length > MAX_INJECT_CHARS) {
+    ctx = ctx.slice(0, MAX_INJECT_CHARS) +
+      '\n\n> ⚠️ 注入內容超過 ' + MAX_INJECT_CHARS + ' 字元被截斷——標記段膨脹了，請精簡。';
+  }
+  return ctx;
+}
+
+function readFileSafe(p) {
+  try { return fs.readFileSync(p, 'utf8'); } catch { return null; }
+}
+
+function main() {
+  const quickref = extractBetween(readFileSafe(QUICKREF_FILE), '<!-- QUICKREF:START -->', '<!-- QUICKREF:END -->');
+  const decision = extractBetween(readFileSafe(DECISION_FILE), '<!-- INJECT:START -->', '<!-- INJECT:END -->');
+  const ctx = buildAdditionalContext({ quickref, decision });
+  if (!ctx) { logHook('passed', 'no injectable content'); process.exit(0); }
+  logHook('passed', `injected ${ctx.length} chars`);
+  console.log(JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx }
+  }));
+  process.exit(0);
+}
+
+module.exports = { extractBetween, buildAdditionalContext, MAX_INJECT_CHARS };
+if (require.main === module) main();
