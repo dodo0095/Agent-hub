@@ -1,7 +1,7 @@
 # 目錄結構說明
 
-> **版本**: v1.2
-> **最後更新**: 2026-03-30
+> **版本**: v1.3
+> **最後更新**: 2026-07-04（補 Sprint 5 MCP、cost 追蹤系列、worktree-manager、migrations、scripts）
 
 ---
 
@@ -47,8 +47,18 @@ electron/
 │   ├── hooks.ts                 # Hook 管理
 │   ├── project-sync.ts          # 專案檔案同步 IPC
 │   └── system.ts                # 系統健康、資料夾選擇
-├── services/                    # 核心服務（~14 個）
+├── services/                    # 核心服務（~29 個）
 │   ├── session-manager.ts       # 核心：PTY 管理、Session 生命週期
+│   ├── session-spawn-helpers.ts # spawn 參數組裝、cwd 解析、workspace trust
+│   ├── session-delegation.ts    # Session 間任務委派
+│   ├── session-conversation-scanner.ts # 掃描可 resume 的 Claude 對話
+│   ├── session-cost-tracker.ts  # Session cost 統計（statusLine fallback）
+│   ├── jsonl-usage-tracker.ts   # JSONL cost 解析（主要來源，PM-010）
+│   ├── cost-backfill.ts         # App 啟動補登歷史 session cost（PM-011）
+│   ├── pricing.ts               # 模型價目表（tracker/backfill 共用）
+│   ├── worktree-manager.ts      # 每 session 獨立 git worktree（PM-008）
+│   ├── message-broker.ts        # 跨 Agent 訊息（inbox poll → PTY 注入）
+│   ├── pty-manager.ts           # PTY spawn/kill/輸出處理
 │   ├── database.ts              # sql.js 初始化、migration
 │   ├── agent-loader.ts          # Agent YAML 載入
 │   ├── prompt-assembler.ts      # System Prompt 組裝
@@ -57,6 +67,8 @@ electron/
 │   ├── gate-keeper.ts           # Gate 審核邏輯
 │   ├── task-manager.ts          # 任務管理
 │   ├── sprint-manager.ts        # Sprint 管理
+│   ├── skill-manager.ts         # Skill CRUD / 部署
+│   ├── pitfall-service.ts       # 踩坑紀錄服務
 │   ├── git-manager.ts           # Git 操作封裝
 │   ├── knowledge-reader.ts      # 知識庫讀取
 │   ├── file-watcher.ts          # 檔案監控
@@ -65,10 +77,24 @@ electron/
 │   ├── hook-manager.ts          # Hook 偵測/產生/寫入
 │   ├── markdown-parser.ts       # 解析 .tasks/*.md + dev-plan 第 10 節
 │   └── project-sync.ts          # chokidar 監聽 → DB 同步
+├── mcp/                         # MCP Servers（Sprint 5）
+│   └── send-message-server.ts   # 跨 Agent send_message / list_inbox（build:mcp → out/mcp/）
+├── migrations/                  # DB migrations（001~017，新增 schema 必加版本）
 ├── types/                       # 共享型別
 │   └── ipc.ts                   # IpcChannels 常數 + 型別定義
 └── utils/
     └── skill-generator.ts       # Skill 注入工具
+```
+
+## Scripts（scripts/）
+
+```
+scripts/
+├── smoke-test-hooks.cjs         # Hook 煙霧測試（修改 .claude/hooks/*.js 後必跑）
+├── verify-jsonl-cost.cjs        # 一次性掃描 JSONL 驗算 cost（PM-011 驗證用）
+├── verify-backfill.cjs          # backfill 結果驗證
+├── backfill-cost.cjs            # （已由 cost-backfill.ts 取代，留存參考）
+└── gen-e2e-doc.py               # E2E 驗證文件產生
 ```
 
 ## Vue 3 Renderer

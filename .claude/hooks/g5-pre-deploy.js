@@ -36,7 +36,9 @@ function logHook(result, reason) {
   try { fs.mkdirSync(logDir, { recursive: true }); } catch {}
   const entry = JSON.stringify({
     hook: 'g5-pre-deploy', type: 'PreToolUse',
-    result, reason, ts: new Date().toISOString()
+    result, reason, ts: new Date().toISOString(),
+    // 煙霧測試合成紀錄打標（見 stop-validator.js 同款註解）
+    ...(process.env.AGENTHUB_HOOK_TEST === '1' ? { synthetic: true } : {})
   });
   try { fs.appendFileSync(path.join(logDir, 'hook-execution.jsonl'), entry + '\n'); } catch {}
 }

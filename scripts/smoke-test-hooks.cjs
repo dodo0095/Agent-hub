@@ -59,7 +59,9 @@ for (const c of cases) {
   let out = '';
   try {
     out = execSync(`node "${path.join(HOOKS, c.hook)}"`, {
-      input: JSON.stringify(c.payload), encoding: 'utf8', timeout: 30000
+      input: JSON.stringify(c.payload), encoding: 'utf8', timeout: 30000,
+      // 合成紀錄打標：hook 會在 log entry 加 synthetic:true，不污染警報統計
+      env: { ...process.env, AGENTHUB_HOOK_TEST: '1' }
     });
   } catch (e) {
     out = (e.stdout || '') + (e.stderr || '');

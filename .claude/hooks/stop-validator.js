@@ -35,7 +35,9 @@ function logHook(result, reason) {
   rotateLogIfNeeded();
   const entry = JSON.stringify({
     hook: 'stop-validator', type: 'Stop',
-    result, reason, ts: new Date().toISOString()
+    result, reason, ts: new Date().toISOString(),
+    // 煙霧測試（AGENTHUB_HOOK_TEST=1）的合成紀錄打標，避免污染 /harness-audit 警報統計
+    ...(process.env.AGENTHUB_HOOK_TEST === '1' ? { synthetic: true } : {})
   });
   try { fs.appendFileSync(LOG_FILE, entry + '\n'); } catch {}
 }

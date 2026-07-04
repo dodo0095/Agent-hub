@@ -52,9 +52,9 @@ allowed-tools: Read, Glob, Grep, Bash
 
 > 一個永遠響的警報和一個永遠不響的警報一樣沒用——前者教 agent 忽略紅燈，後者給人虛假安全感。
 
-- [ ] 統計 `.claude/hook-execution.jsonl` 各 hook 的 blocked / passed / warned 次數：
+- [ ] 統計 `.claude/hook-execution.jsonl` 各 hook 的 blocked / passed / warned 次數（先排除煙霧測試的合成紀錄）：
   ```
-  grep -o '"hook":"[a-z0-9-]*","type":"[A-Za-z]*","result":"[a-z]*"' .claude/hook-execution.jsonl | sort | uniq -c
+  grep -v '"synthetic":true' .claude/hook-execution.jsonl | grep -o '"hook":"[a-z0-9-]*","type":"[A-Za-z]*","result":"[a-z]*"' | sort | uniq -c
   ```
 - [ ] 任何 hook 的 block 率 = 100%（從未 pass）→ **失效警報**，最高優先修復（歷史案例：stop-validator 曾 blocked 175 / passed 0）
 - [ ] 任何「會攔截」的 hook block 率 = 0% 且樣本 > 200 → 檢查是否形同虛設或 regex 永不匹配

@@ -42,7 +42,9 @@ function logHook(result, reason) {
   try { fs.mkdirSync('.claude', { recursive: true }); } catch {}
   const entry = JSON.stringify({
     hook: 'protect-verify-clone', type: 'PreToolUse',
-    result, reason, ts: new Date().toISOString()
+    result, reason, ts: new Date().toISOString(),
+    // 煙霧測試合成紀錄打標（見 stop-validator.js 同款註解）
+    ...(process.env.AGENTHUB_HOOK_TEST === '1' ? { synthetic: true } : {})
   });
   try { fs.appendFileSync(path.join('.claude', 'hook-execution.jsonl'), entry + '\n'); } catch {}
 }
