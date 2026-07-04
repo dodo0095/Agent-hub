@@ -42,6 +42,10 @@ export interface ActiveSession {
   durationMs: number;
   startedAt: string;
   ptyId: string;
+  /** PM-008: session 實際工作目錄（worktree 路徑或專案根目錄） */
+  workDir: string;
+  /** PM-008: worktree 綁定的分支；未使用 worktree 時為 null */
+  gitBranch: string | null;
 }
 
 export interface SessionRecord {
@@ -190,6 +194,8 @@ export const useSessionsStore = defineStore('sessions', () => {
         durationMs: 0,
         startedAt: new Date().toISOString(),
         ptyId: result.ptyId,
+        workDir: item.projectPath,
+        gitBranch: null,
       });
       selectedSessionId.value = result.sessionId;
       return result;
@@ -232,6 +238,9 @@ export const useSessionsStore = defineStore('sessions', () => {
         durationMs: 0,
         startedAt: new Date().toISOString(),
         ptyId: result.ptyId,
+        // placeholder：真實 workDir / gitBranch 由下一次 fetchActive() 從主進程帶回
+        workDir: '',
+        gitBranch: null,
       });
       selectedSessionId.value = result.sessionId;
       return result;

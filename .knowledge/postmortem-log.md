@@ -36,6 +36,8 @@
 | hook 永遠 block 或永遠 pass | 警報失效，最高優先修（`/harness-audit` 原則 7） | PM-013 |
 | system prompt 宣告工具 | 必須先確認 harness 真的部署了該工具 | PM-006 |
 | 全套測試 | 基準線已清零（2026-07-03，359/359 綠）。**紅 = 你弄壞了東西，必須修，不可視為預存** | PM-012 |
+| 多 session git 隔離 | 每 session 獨立 worktree（`.agenthub-worktrees/`），勿對共享 working tree 做 checkout；停用開關 `AGENTHUB_NO_WORKTREE=1` | PM-008 |
+| worktree 環境 | worktree 內沒有 node_modules / .env（git 不追蹤），需要就自行 `npm install` | PM-008 |
 | happy-dom 測試環境 | 只「掛上」mock 到 window，**絕不整顆替換 window**（會毀掉 Event/performance 等原生介面） | PM-012 |
 | mock DB 查詢 | 用 SQL-aware `mockImplementation`，不用 `mockReturnValueOnce` 佇列（會把實作私有呼叫順序寫死進測試） | PM-012 |
 | 測 exposed method | 不 `vi.spyOn` exposed proxy（Vue 3.5 攔不到 template ref 呼叫），改斷言可觀察 DOM 行為 | PM-012 |
@@ -137,7 +139,7 @@
   - 新增 commands 時 frontmatter 模板**不得**包含 `disable-model-invocation: true`
   - 可寫個 hook 在 commands 檔案被建立時自動檢查並警告
 
-### PM-008: Multi-session race condition — tryAutoBranch 切走他人正在用的 working tree（待修）
+### PM-008: Multi-session race condition — tryAutoBranch 切走他人正在用的 working tree（✅ 已解決 2026-07-04）
 
 - **發現日期**: 2026-04-29
 - **影響範圍**: 所有同時開啟多個 session 的場景
@@ -159,6 +161,15 @@
 - **預防**:
   - GUI 顯眼處警示「多 session 同時 active 時 git 操作不安全」
   - 修復後在 architecture.md 補上「working tree 共享問題」章節
+- **實際修復（2026-07-04，方案 B 落地）**:
+  1. 新增 `electron/services/worktree-manager.ts`：`setupSessionWorktree()` 每個新 session 建獨立 worktree（`<專案父目錄>/.agenthub-worktrees/<專案名>/<sid8>`），分支 `agent/<agentId>/<taskId或日期>`，同名分支被佔用自動加 `-s<sid8>` 後綴
+  2. 刪除 `tryAutoBranch()`（race 根源），spawn 不再對共享 working tree 做任何 checkout
+  3. migration 017：`claude_sessions` 加 `work_dir` / `git_branch`；resume 優先回原 session 的 `work_dir`（Claude CLI 依 cwd 找 conversation JSONL，換目錄會找不到對話）
+  4. 清理策略：session 結束移除 worktree；dirty 一律保留（半成品不可銷毀）；completed 等 auto-commit 完成後才清；防呆不會誤刪專案本體
+  5. GUI：SessionCard 顯示分支列（hover 顯示 worktree 路徑）
+  6. 逃生口：`AGENTHUB_NO_WORKTREE=1` 停用；一切失敗 fallback 舊行為（非致命）
+- **驗證**: `tests/services/worktree-manager.test.ts` 用真實 git repo 驗證 11 場景，含驗收核心「兩 session 並行 commit 各落自己分支、main reflog 無 checkout」；全套 370/370 綠；typecheck / lint 綠；`npm run build` 完成且 `out/main/index.js` grep 到 worktree 程式碼（PM-011 鐵律）
+- **已知取捨**: worktree 內無 node_modules / .env（git 不追蹤），agent 需自行安裝，詳見 architecture.md「Session Worktree 隔離」
 
 ### PM-009: g5-pre-deploy hook regex 過寬 — 任何含 deploy 字串的 cmd 都被當部署擋下
 

@@ -47,6 +47,10 @@ export interface ActiveSession {
   durationMs: number;
   startedAt: string;
   ptyId: string;
+  /** PM-008: session 實際工作目錄（worktree 路徑或專案根目錄） */
+  workDir: string;
+  /** PM-008: worktree 綁定的分支；未使用 worktree 時為 null */
+  gitBranch: string | null;
 }
 
 export interface SpawnParams {

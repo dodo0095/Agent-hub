@@ -34,6 +34,7 @@ import {
   resolveSpawnCwd,
 } from './session-spawn-helpers';
 import { DelegationManager } from './session-delegation';
+import { setupSessionWorktree, cleanupSessionWorktree } from './worktree-manager';
 import { messageBroker } from './message-broker';
 import type {
   SpawnParams,
@@ -77,8 +78,12 @@ interface ManagedSession {
   lastCheckpointLen: number;
   /** Timer for waiting on summary response during graceful stop */
   summaryTimer: ReturnType<typeof setInterval> | null;
-  /** Working directory used for this session's PTY */
+  /** Working directory used for this session's PTY（PM-008: 可能是 session 專屬 worktree） */
   workDir: string;
+  /** PM-008: 專案根目錄（worktree 的母 repo）。workDir === repoDir 代表未用 worktree */
+  repoDir: string;
+  /** PM-008: worktree 綁定的分支名，未用 worktree 時為 null */
+  gitBranch: string | null;
   /** Timer for detecting interactive idle state (no PTY output for N seconds) */
   idleTimer: ReturnType<typeof setTimeout> | null;
   /** Queued messages to send when session becomes idle */
@@ -235,8 +240,27 @@ class SessionManager {
     const resumeInfo = lookupResumeInfo(isResume, params.resumeSessionId);
 
     // Resolve working directory
-    const spawnCwd = resolveSpawnCwd(params, isResume, isDirectResume, resumeInfo);
-    logger.info(`Session ${sessionId} working directory: ${spawnCwd}`);
+    const repoCwd = resolveSpawnCwd(params, isResume, isDirectResume, resumeInfo);
+
+    // PM-008: 每個新 session 建立獨立 git worktree，隔離 HEAD / index，
+    // 根治多 session 共享 working tree 的 checkout race（方案 B）。
+    // resume 不建新 worktree（resolveSpawnCwd 已回到原 session 的 cwd）。
+    // setup 失敗回 null → fallback 共享 working tree（舊行為，非致命）。
+    let spawnCwd = repoCwd;
+    let gitBranch: string | null = null;
+    if (!isResume && !isDirectResume) {
+      const worktree = setupSessionWorktree({
+        repoDir: repoCwd,
+        sessionId,
+        agentId: params.agentId,
+        taskId: params.taskId || null,
+      });
+      if (worktree) {
+        spawnCwd = worktree.worktreePath;
+        gitBranch = worktree.branch;
+      }
+    }
+    logger.info(`Session ${sessionId} working directory: ${spawnCwd}${gitBranch ? ` (worktree branch ${gitBranch})` : ''}`);
 
     // Auto-accept workspace trust so Claude Code's statusLine command can run
     // (required since v2.1.51, otherwise cost/token tracking is silently disabled).
@@ -306,7 +330,8 @@ class SessionManager {
       toolCallsCount: 0, turnsCount: 0, startedAt: now,
       ptyProcess, eventParser, tmpFile, interactive,
       completionCallbacks: [], outputBuffer: '', lastCheckpointLen: 0,
-      summaryTimer: null, workDir: spawnCwd, idleTimer: null, pendingMessages: [],
+      summaryTimer: null, workDir: spawnCwd, repoDir: repoCwd, gitBranch,
+      idleTimer: null, pendingMessages: [],
     };
 
     this.sessions.set(sessionId, session);
@@ -315,9 +340,9 @@ class SessionManager {
     try {
       const parentId = isDirectResume ? null : isResume ? params.resumeSessionId! : (params.parentSessionId || null);
       database.run(
-        `INSERT INTO claude_sessions (id, agent_id, task, task_id, project_id, model, status, started_at, parent_session_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [sessionId, agentId, taskText, session.taskId, session.projectId, model, 'starting', now, parentId],
+        `INSERT INTO claude_sessions (id, agent_id, task, task_id, project_id, model, status, started_at, parent_session_id, work_dir, git_branch)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [sessionId, agentId, taskText, session.taskId, session.projectId, model, 'starting', now, parentId, spawnCwd, gitBranch],
       );
     } catch (err) {
       logger.error('Failed to insert session into DB', err);
@@ -337,7 +362,8 @@ class SessionManager {
       }
     }
 
-    this.tryAutoBranch(sessionId, spawnCwd, agentId, session.taskId);
+    // PM-008: tryAutoBranch 已移除 —— 分支在 setupSessionWorktree 建 worktree 時一併建立，
+    // 不再對共享 working tree 做 git checkout（那正是 race 的根源）
     this.wirePtyHandlers(session, ptyProcess, eventParser, ptyId, interactive);
     this.updateStatus(sessionId, interactive ? 'running' : 'starting');
 
@@ -884,26 +910,8 @@ class SessionManager {
     }, 500));
   }
 
-  private async tryAutoBranch(sessionId: string, cwd: string, agentId: string, taskId: string | null): Promise<void> {
-    try {
-      const gitStatus = await gitManager.getStatus(cwd);
-      if (!gitStatus.isRepo) return;
-      const branchName = `agent/${agentId}/${taskId || new Date().toISOString().slice(0, 10)}`;
-
-      // Try checkout first (works if branch exists), then create if it doesn't
-      try {
-        await gitManager.checkout(cwd, branchName);
-        logger.info(`Session ${sessionId} checked out existing branch ${branchName}`);
-      } catch {
-        try {
-          await gitManager.createBranch(cwd, branchName, true);
-          logger.info(`Session ${sessionId} created auto-branch ${branchName}`);
-        } catch (createErr) {
-          logger.warn(`Session ${sessionId} auto-branch create failed (non-fatal)`, createErr);
-        }
-      }
-    } catch (err) { logger.warn(`Session ${sessionId} auto-branch failed (non-fatal)`, err); }
-  }
+  // PM-008: tryAutoBranch 已刪除。它對「共享 working tree」做 git checkout，
+  // 是多 session commit 落錯分支的 race 根源。分支建立已移至 setupSessionWorktree。
 
   private async tryAutoCommit(sessionId: string, cwd: string, agentId: string, taskSummary?: string): Promise<void> {
     try {
@@ -930,7 +938,12 @@ class SessionManager {
     const durationMs = Date.now() - new Date(session.startedAt).getTime();
 
     if (status === 'completed') {
-      if (session.workDir) this.tryAutoCommit(sessionId, session.workDir, session.agentId, session.task);
+      if (session.workDir) {
+        // PM-008: worktree 清理必須等 auto-commit 完成（tryAutoCommit 是 async），
+        // 否則可能在 commit 進行中把 worktree 抽走
+        this.tryAutoCommit(sessionId, session.workDir, session.agentId, session.task)
+          .finally(() => this.tryCleanupWorktree(session));
+      }
 
       // 9B: Persist session output summary for task chaining
       const outputSummary = stripTerminalOutput(session.outputBuffer.slice(-5000)).slice(-2000) || null;
@@ -986,8 +999,22 @@ class SessionManager {
     session.completionCallbacks = [];
 
     if (session.workDir) hookManager.unwatchHookLogs(session.workDir);
+    // PM-008: 非 completed 結束（stopped / failed）直接清理 worktree；
+    // completed 的清理掛在 tryAutoCommit 完成後（見上方）
+    if (status !== 'completed') this.tryCleanupWorktree(session);
     this.cleanupTmpFile(session);
     setTimeout(() => { this.sessions.delete(sessionId); }, 5000);
+  }
+
+  /** PM-008: 清理 session 專屬 worktree（冪等；dirty worktree 保留不刪） */
+  private tryCleanupWorktree(session: ManagedSession): void {
+    if (!session.gitBranch || session.workDir === session.repoDir) return; // 沒用 worktree
+    try {
+      const result = cleanupSessionWorktree(session.repoDir, session.workDir);
+      logger.info(`Session ${session.sessionId} worktree cleanup: ${result}`);
+    } catch (err) {
+      logger.warn(`Session ${session.sessionId} worktree cleanup failed (non-fatal)`, err);
+    }
   }
 
   private cleanupTmpFile(session: ManagedSession): void {
@@ -1140,6 +1167,8 @@ class SessionManager {
       durationMs: Date.now() - new Date(s.startedAt).getTime(),
       startedAt: s.startedAt,
       ptyId: s.ptyId,
+      workDir: s.workDir,
+      gitBranch: s.gitBranch,
     };
   }
 

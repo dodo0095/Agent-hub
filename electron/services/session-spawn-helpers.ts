@@ -231,6 +231,9 @@ export interface ResumeInfo {
   task?: string;
   task_id?: string;
   project_id?: string;
+  /** PM-008: 原 session 的實際 cwd（可能是 worktree）。resume 必須回同一目錄，
+   *  Claude CLI 依 cwd 編碼尋找 conversation JSONL */
+  work_dir?: string;
 }
 
 /**
@@ -240,7 +243,7 @@ export function lookupResumeInfo(isResume: boolean, resumeSessionId?: string): R
   if (!isResume || !resumeSessionId) return {};
   try {
     const rows = database.prepare(
-      'SELECT agent_id, task, task_id, project_id FROM claude_sessions WHERE id = ?',
+      'SELECT agent_id, task, task_id, project_id, work_dir FROM claude_sessions WHERE id = ?',
       [resumeSessionId],
     );
     if (rows.length > 0) return rows[0];
@@ -319,6 +322,12 @@ export function resolveSpawnCwd(
   resumeInfo: ResumeInfo,
 ): string {
   if (isDirectResume && params.projectPath) return params.projectPath;
+
+  // PM-008: resume 優先回到原 session 的 cwd（可能是已存在的 worktree）。
+  // Claude CLI 依 cwd 編碼儲存 conversation，換目錄 resume 會找不到對話
+  if (isResume && resumeInfo.work_dir && existsSync(resumeInfo.work_dir)) {
+    return resumeInfo.work_dir;
+  }
 
   let spawnCwd = process.cwd();
   const effectiveAgentId = isResume ? (resumeInfo.agent_id || params.agentId) : params.agentId;

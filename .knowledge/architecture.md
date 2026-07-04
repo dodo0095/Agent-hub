@@ -183,6 +183,31 @@
 
 > 踩坑紀錄：見 `postmortem-log.md` 之 PM-010（從 trust 限制 → `--settings` 靜默丟 statusLine 的兩階段根因）。
 
+### Session Worktree 隔離（PM-008 修復，2026-07-04）
+
+**問題**：多個 session 共享同一個 working tree，spawn 時的 `tryAutoBranch()` 會 `git checkout`
+切走其他 session 正在用的 HEAD → commit 落錯分支（reflog 鐵證見 postmortem PM-008）。
+
+**方案 B（老闆選定）**：每個新 session 一個獨立 git worktree。
+
+| 項目 | 檔案 | 說明 |
+|------|------|------|
+| `setupSessionWorktree()` | `electron/services/worktree-manager.ts` | spawn 時建立 `<專案父目錄>/.agenthub-worktrees/<專案名>/<sid8>`，分支 `agent/<agentId>/<taskId或日期>`；同名分支被佔用自動加 `-s<sid8>` 後綴 |
+| `cleanupSessionWorktree()` | 同上 | session 結束時移除 worktree；**dirty（未提交變更）一律保留**；completed 場景等 auto-commit 完成後才清 |
+| `tryAutoBranch()` | ~~已刪除~~ | race 根源，分支建立移至 worktree 建立時 |
+| migration 017 | `electron/migrations/017_session_work_dir.sql` | `claude_sessions` 加 `work_dir` / `git_branch` 欄位 |
+| resume 路徑 | `resolveSpawnCwd()` | resume 優先回原 session 的 `work_dir`（Claude CLI 依 cwd 編碼找 conversation JSONL，換目錄會找不到對話） |
+| GUI | `SessionCard.vue` | 卡片顯示分支列（hover 顯示 worktree 路徑）；`ActiveSession` 型別加 `workDir` / `gitBranch` |
+
+**行為要求**：
+- 全部失敗非致命：worktree 建不起來 → fallback 專案根目錄（等同舊行為，log warn）
+- 逃生口：`AGENTHUB_NO_WORKTREE=1` 整體停用
+- 已知取捨：worktree 只含 git 追蹤檔案，**node_modules / .env 不存在**，agent 需自行 `npm install`
+- 所有 git 呼叫用 `execFileSync('git', [...])` 傳參陣列（路徑含空格如 `ALL PROJECT` 不需引號處理）
+
+> 驗證：`tests/services/worktree-manager.test.ts` 用真實 git repo 驗證「兩 session 並行 commit
+> 各落自己分支、main reflog 無 checkout」等 11 個場景。
+
 ## 已移除服務
 
 | 服務 | 原因 |

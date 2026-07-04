@@ -112,6 +112,12 @@ const isRunning = computed(() => {
       </div>
     </div>
 
+    <!-- PM-008: Worktree branch (if isolated) -->
+    <div v-if="session.gitBranch" class="session-card__branch-bar" :title="session.workDir">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      <span class="session-card__branch-name">{{ session.gitBranch }}</span>
+    </div>
+
     <!-- Linked task (if any) -->
     <div v-if="linkedTask" class="session-card__linked-task-bar">
       <span
@@ -280,6 +286,23 @@ const isRunning = computed(() => {
 .session-card__linked-task-bar {
   border-top: 1px solid var(--color-border-default);
   padding: 6px 14px;
+}
+
+/* PM-008: worktree 分支列 */
+.session-card__branch-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--color-border-default);
+  padding: 6px 14px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.session-card__branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-card__linked-task-link {

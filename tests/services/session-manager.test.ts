@@ -79,6 +79,13 @@ vi.mock('../../electron/services/git-manager', () => ({
   },
 }));
 
+// PM-008: worktree 建立走真實 git，單元測試一律 mock 成 null（= fallback 共享目錄，舊行為）
+// worktree 本身的行為由 tests/services/worktree-manager.test.ts 用真實 git repo 驗證
+vi.mock('../../electron/services/worktree-manager', () => ({
+  setupSessionWorktree: vi.fn(() => null),
+  cleanupSessionWorktree: vi.fn(() => 'skipped'),
+}));
+
 // vitest 4 對 `new mockFn()` 走 Reflect.construct，arrow function 實作不可建構（PM-012 A 類根因）
 // EventParser 在 session-manager.ts 以 `new EventParser()` 使用，mock 必須是真的 class
 vi.mock('../../electron/services/event-parser', () => ({
