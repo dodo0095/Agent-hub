@@ -52,7 +52,11 @@ allowed-tools: Read, Edit, Glob
    - **如果有項目無法確認完成，必須在備註中說明，不可跳過**
 
 2b. **完成證據（必要，源自 PM-011 三次假修復教訓）**：
-   在任務檔案追加 `## 完成證據` 區塊，逐條列出**本次實際執行過**的驗證（不是「應該會過」的推論）：
+   先執行證據產生器並把輸出貼進任務檔的 `## 完成證據` 區塊：
+!`node scripts/preflight.cjs`
+   > preflight 自動涵蓋：工作目錄、分支基底、lint、typecheck、build 新鮮度、IPC 四方提醒。**FAIL 狀態禁止宣告完成**。
+   > 證據等級對照表見 `.knowledge/decision-tables.md` 表 1。
+   再逐條補上 preflight 測不到的驗證（不是「應該會過」的推論）：
    - **程式碼變更**：貼上實際跑過的指令與結果摘要（如 `npx vitest run tests/xxx → 19 passed`、`npm run typecheck → exit 0`）
    - **資料/紀錄類修復**（cost、統計、log）：必須附 production DB / 實際資料的 query 結果，證明修復後資料真的變了。單元測試綠不算數
    - **需要重新 build 才生效的變更**（electron/**）：確認 `out/` build 時間戳新於原始碼，或註明「未重 build，生效需 npm run build」

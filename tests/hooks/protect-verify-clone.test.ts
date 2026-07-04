@@ -37,6 +37,9 @@ describe('protect-verify-clone isVerifyCloneWrite', () => {
       `git -C "${VPOSIX}" checkout main`,
       `git -C "${VPOSIX}" pull`,
       `cd "${VPOSIX}" && npm install && npm run build`,
+      // 重導向「寫入 verify clone」仍要攔
+      `echo hotfix > "${VPOSIX}/README.md"`,
+      `cat patch.diff >> "C:\\Users\\Bandai\\Desktop\\AgentHub\\Agent-hub\\notes.txt"`,
     ];
     for (const cmd of writes) {
       it(`攔下: ${cmd.slice(0, 55)}`, () => {
@@ -53,6 +56,10 @@ describe('protect-verify-clone isVerifyCloneWrite', () => {
       `grep -r "statusLine" "${VPOSIX}/.claude"`,
       'npm run build', // dev clone 的操作，不含 verify 路徑
       `git -C "${DEV}" push origin main`,
+      // 2026-07-04 false positive 修正：stderr/一般重導向目標不是 verify clone 時放行
+      `ls "${VPOSIX}/.claude/hooks" 2>/dev/null`,
+      `cat "${VPOSIX}/CLAUDE.md" 2>&1 | head -5`,
+      `grep -c hook "${VPOSIX}/log.jsonl" > /tmp/count.txt`,
     ];
     for (const cmd of reads) {
       it(`放行: ${cmd.slice(0, 55)}`, () => {

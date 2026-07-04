@@ -13,13 +13,14 @@
 - 核心價值: 用 Harness（Skill + Hook + FileWatcher）驅動虛擬開發公司，GUI 只做監控和 3 個操作
 - 用戶: 老闆（一人公司創辦人）
 
-## 最高原則（3 條致命規則）
+## 最高原則（4 條致命規則）
 
 1. **文件就是法律** — 程式碼必須與規範文件一致，不一致以文件為準 → `.knowledge/doc-governance.md`
 2. **IPC 四方同步** — `ipc.ts` → `preload.ts` → `useIpc.ts` → `env.d.ts` 缺一不可 → `.knowledge/architecture.md`
-3. **不確定就去讀，不要猜** — 不得憑空想像資料結構或 API 格式 → `.knowledge/coding-standards.md`
+3. **不確定就去讀，不要猜** — 不得憑空想像資料結構或 API 格式 → `.knowledge/coding-standards.md` ＋ `.knowledge/decision-tables.md` 表 4
+4. **完成 = 證據** — 宣告完成前跑 `node scripts/preflight.cjs` 並貼輸出；證據等級查 `.knowledge/decision-tables.md` 表 1。需要「判斷」的時刻（除錯熔斷、升級、警報回應）一律先查決策表，不靠感覺
 
-> ※ 硬約束由 Hook 強制（見 `.claude/settings.json`）：kill-port / --no-verify / force push main（forbidden-commands）、寫入 Verify clone（protect-verify-clone）、部署前 typecheck+build（g5）、Stop 時 lint+typecheck（stop-validator）
+> ※ 硬約束由 Hook 強制（見 `.claude/settings.json`）：kill-port / --no-verify / force push main（forbidden-commands）、寫入 Verify clone（protect-verify-clone）、部署前 typecheck+build（g5）、Stop 時 lint+typecheck（stop-validator）、SessionStart 自動注入教訓摘要（session-start-context）
 
 ## 兩份 Clone（獨立 repo，非 worktree）
 
@@ -34,6 +35,7 @@
 
 ```bash
 npm run dev / test / lint / typecheck / build
+node scripts/preflight.cjs          # 完成證據產生器（/task-done 前必跑）
 node scripts/smoke-test-hooks.cjs   # 修改 hook 後必跑
 ```
 
@@ -45,13 +47,14 @@ node scripts/smoke-test-hooks.cjs   # 修改 hook 後必跑
 
 | 文件 | 用途 |
 |------|------|
+| `.knowledge/decision-tables.md` | **決策表：證據等級、除錯熔斷、升級界線、警報回應**（判斷前先查） |
+| `.knowledge/postmortem-log.md` | **踩坑快速參考（必讀）** + 歷史紀錄 PM-001~013 |
 | `.knowledge/project-overview.md` | 專案概述、目標、技術棧、v1→v2 變更摘要 |
 | `.knowledge/architecture.md` | 系統架構、服務清單、IPC 規則、Cost Tracking、Worktree 隔離 |
 | `.knowledge/directory-structure.md` | 目錄結構詳細說明 |
 | `.knowledge/coding-standards.md` | 編碼規範、命名、Commit 紀律、禁止憑空想像 |
 | `.knowledge/testing-standards.md` | 測試策略與規範 |
 | `.knowledge/quality-checklist.md` | G0-G6 品質檢查清單 |
-| `.knowledge/postmortem-log.md` | **踩坑快速參考（必讀）** + 歷史紀錄 PM-001~013 |
 | `.knowledge/doc-governance.md` | 文件治理 8 條完整規則 |
 | `.knowledge/team-hierarchy.md` | 團隊架構、指揮鏈、Sprint 概覽 |
 | `.knowledge/company-rules.md` | 公司共用規則（文件層級、命名骨架、依賴規則） |
@@ -77,4 +80,5 @@ node scripts/smoke-test-hooks.cjs   # 修改 hook 後必跑
 |------|------|
 | `company/sop/{sprint-planning,code-review}.md` | Sprint 規劃 / Code Review SOP |
 | `company/standards/*.md` | 公司編碼/API/品質標準、子專案共用規則與流程 |
-| `company/templates/*.template` | Sprint 提案書 / 開發計畫書 / 內部審查報告範本 |
+| `company/templates/*.template` | Sprint 提案書 / 開發計畫書 / 內部審查報告 / 決策表範本 |
+| `company/hook-templates/session-start-context.js.template` | SessionStart 教訓注入 hook 範本（供子專案傳播） |

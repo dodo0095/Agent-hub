@@ -15,7 +15,9 @@
 ## 踩坑快速參考
 
 > 這張表是弱模型每次真正會讀的部分。新增踩坑時把教訓濃縮成一行加進來（`/pitfall-record` 步驟 5）。
+> `<!-- QUICKREF -->` 標記之間的內容由 SessionStart hook 自動注入每個 session，**保持每行精簡**。
 
+<!-- QUICKREF:START -->
 | 場景 | 規則 | 出處 |
 |------|------|------|
 | `node-pty` 編譯 | 需要 Visual Studio Build Tools。`npx electron-rebuild -f -w node-pty` | PM-001 |
@@ -42,6 +44,7 @@
 | happy-dom 測試環境 | 只「掛上」mock 到 window，**絕不整顆替換 window**（會毀掉 Event/performance 等原生介面） | PM-012 |
 | mock DB 查詢 | 用 SQL-aware `mockImplementation`，不用 `mockReturnValueOnce` 佇列（會把實作私有呼叫順序寫死進測試） | PM-012 |
 | 測 exposed method | 不 `vi.spyOn` exposed proxy（Vue 3.5 攔不到 template ref 呼叫），改斷言可觀察 DOM 行為 | PM-012 |
+<!-- QUICKREF:END -->
 
 ---
 

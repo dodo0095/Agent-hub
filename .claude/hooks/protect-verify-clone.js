@@ -21,7 +21,10 @@ const VERIFY_CLONE_RE = /(?:[A-Za-z]:[\\/]|\/[a-z]\/)Users[\\/]Bandai[\\/]Deskto
 const WRITE_VERBS_RE = new RegExp(
   [
     '\\brm\\b', '\\bcp\\b', '\\bmv\\b', '\\btouch\\b', '\\bmkdir\\b', '\\btee\\b',
-    'sed\\s+-i', '>>?', '\\bnpm\\b', '\\bnpx\\b', '\\bnode\\b',
+    'sed\\s+-i', '\\bnpm\\b', '\\bnpx\\b', '\\bnode\\b',
+    // 重導向只在「目標指向 verify clone」時算寫入——
+    // `ls <verify路徑> 2>/dev/null` 的 stderr 重導向是唯讀操作，不可誤攔（2026-07-04 false positive 修正）
+    '>>?\\s*"?[^>|;&\\n]*Desktop[\\\\/]+AgentHub',
     // git 後可能有 -C <path> 等參數，允許中間隔任意字元（對 verify clone 寧可過度攔截）
     'git\\b[^\\n]*?\\b(?:push|checkout|reset|merge|commit|add|rm|clean|stash|pull|rebase|apply)\\b'
   ].join('|')
