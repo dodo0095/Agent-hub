@@ -38,6 +38,7 @@
 | 全套測試 | 基準線已清零（2026-07-03，359/359 綠）。**紅 = 你弄壞了東西，必須修，不可視為預存** | PM-012 |
 | 多 session git 隔離 | 每 session 獨立 worktree（`.agenthub-worktrees/`），勿對共享 working tree 做 checkout；停用開關 `AGENTHUB_NO_WORKTREE=1` | PM-008 |
 | worktree 環境 | worktree 內沒有 node_modules / .env（git 不追蹤），需要就自行 `npm install` | PM-008 |
+| 測試依賴編譯產物 | 測試若讀 `out/` 下的檔案，CI 必須在測試前先跑對應 build（本地有殘留產物 ≠ CI 有）；新增此類測試時同步改 workflow | — |
 | happy-dom 測試環境 | 只「掛上」mock 到 window，**絕不整顆替換 window**（會毀掉 Event/performance 等原生介面） | PM-012 |
 | mock DB 查詢 | 用 SQL-aware `mockImplementation`，不用 `mockReturnValueOnce` 佇列（會把實作私有呼叫順序寫死進測試） | PM-012 |
 | 測 exposed method | 不 `vi.spyOn` exposed proxy（Vue 3.5 攔不到 template ref 呼叫），改斷言可觀察 DOM 行為 | PM-012 |

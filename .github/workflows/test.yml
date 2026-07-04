@@ -1,9 +1,11 @@
 name: Test
 
-# PM-012 修復（2026-07-03）：
-# 1. 觸發範圍加入 agent/**——過去 agent 分支不觸發 CI，全套測試紅了 20 天沒人發現
-# 2. lint job 原本誤跑 typecheck（copy-paste 錯誤），改回 npm run lint
-# 3. 全套測試基準線已清零（359/359 綠），此 workflow 恢復守門效力：紅 = 你弄壞了東西
+# 2026-07-04 整併與修復：
+# 1. 測試前必須先 `npm run build:mcp` —— tests/mcp/*.e2e.test.ts 依賴編譯產物
+#    out/mcp/send-message-server.js，CI 乾淨環境沒有它（本地有殘留產物所以一直沒發現）
+# 2. actions 升級 v4→v5、Node 20→22（GitHub runner 的 Node 20 退役警告）
+# 3. ci.yml 已刪除 —— 與本檔內容重複，每次 push 白付一倍 Windows runner 費用
+# （2026-07-03）觸發範圍含 agent/**：過去 agent 分支不觸發 CI，紅了 20 天沒人發現
 on:
   push:
     branches: [main, master, 'agent/**', 'feature/**']
@@ -14,10 +16,10 @@ jobs:
   typecheck:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
@@ -25,22 +27,23 @@ jobs:
   unit-test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run build:mcp   # MCP E2E 測試依賴此編譯產物
       - run: npm run test:unit
       - run: npm run test:coverage
 
   lint:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run lint
