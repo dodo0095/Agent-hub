@@ -90,24 +90,28 @@ function createWindow(): void {
     });
   }
 
-  // Enable right-click context menu (copy / paste / select all)
+  // Enable right-click context menu (copy / paste / select all).
+  // Only show for editable fields or when there is a native selection. The
+  // Session terminal (xterm.js) manages its own selection/clipboard and is not
+  // reflected in params.selectionText, so this native menu must not fire there
+  // (SessionTerminal.vue handles right-click copy/paste itself).
   mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable && !params.selectionText) return;
+
     const menu = new Menu();
 
     if (params.isEditable) {
       menu.append(new MenuItem({ label: t('electron.menu.cut'), role: 'cut' }));
       menu.append(new MenuItem({ label: t('electron.menu.copy'), role: 'copy' }));
       menu.append(new MenuItem({ label: t('electron.menu.paste'), role: 'paste' }));
-    } else if (params.selectionText) {
+    } else {
       menu.append(new MenuItem({ label: t('electron.menu.copy'), role: 'copy' }));
     }
 
     menu.append(new MenuItem({ type: 'separator' }));
     menu.append(new MenuItem({ label: t('electron.menu.selectAll'), role: 'selectAll' }));
 
-    if (menu.items.length > 0) {
-      menu.popup();
-    }
+    menu.popup();
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
