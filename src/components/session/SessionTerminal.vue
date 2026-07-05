@@ -20,9 +20,32 @@ let initialized = false;
 let alive = true;
 let writeBuffer = '';
 let writeRafId: number | null = null;
+let onContextMenu: ((event: MouseEvent) => void) | null = null;
 
 // Injected from SessionsView — bumped when a collapsed group expands
 const refitSignal = inject<Ref<number>>('terminalRefitSignal', ref(0));
+
+/** Copy current terminal selection to the system clipboard (no-op if empty). */
+async function copySelection(): Promise<void> {
+  if (!terminal || !terminal.hasSelection()) return;
+  const text = terminal.getSelection();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard may reject (permissions / focus); never crash the terminal.
+  }
+}
+
+/** Read clipboard text and send it to the PTY as input (paste). */
+async function pasteFromClipboard(): Promise<void> {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) ipc.ptyInput(props.ptyId, text);
+  } catch {
+    // Clipboard read may reject; silently ignore.
+  }
+}
 
 function createTerminal() {
   return new Terminal({
@@ -67,6 +90,37 @@ async function initTerminal() {
 
   terminal.open(terminalRef.value);
   try { fitAddon.fit(); } catch { /* ignore */ }
+
+  // Clipboard: terminals capture Ctrl+C as SIGINT, so use Ctrl+Shift+C/V.
+  // Return false tells xterm we handled the key and must NOT forward it to the PTY.
+  terminal.attachCustomKeyEventHandler((event) => {
+    if (event.type !== 'keydown') return true;
+    if (event.ctrlKey && event.shiftKey && (event.key === 'C' || event.key === 'c')) {
+      void copySelection();
+      return false;
+    }
+    if (event.ctrlKey && event.shiftKey && (event.key === 'V' || event.key === 'v')) {
+      void pasteFromClipboard();
+      return false;
+    }
+    return true;
+  });
+
+  // Copy-on-select: reflect the terminal selection into the clipboard automatically.
+  terminal.onSelectionChange(() => {
+    void copySelection();
+  });
+
+  // Right-click: copy when there is a selection, otherwise paste.
+  onContextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    if (terminal?.hasSelection()) {
+      void copySelection();
+    } else {
+      void pasteFromClipboard();
+    }
+  };
+  terminalRef.value.addEventListener('contextmenu', onContextMenu);
 
   // Replay output buffer from Main Process to restore terminal content
   if (!initialized) {
@@ -182,6 +236,10 @@ onBeforeUnmount(() => {
   if (writeRafId !== null) cancelAnimationFrame(writeRafId);
   writeRafId = null;
   writeBuffer = '';
+  if (onContextMenu && terminalRef.value) {
+    terminalRef.value.removeEventListener('contextmenu', onContextMenu);
+  }
+  onContextMenu = null;
   resizeObserver?.disconnect();
   terminal?.dispose();
   terminal = null;
@@ -189,6 +247,10 @@ onBeforeUnmount(() => {
 });
 
 function reinit() {
+  if (onContextMenu && terminalRef.value) {
+    terminalRef.value.removeEventListener('contextmenu', onContextMenu);
+  }
+  onContextMenu = null;
   resizeObserver?.disconnect();
   resizeObserver = null;
   terminal?.dispose();
@@ -212,7 +274,11 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="terminalRef" class="h-full w-full overflow-hidden" />
+  <div
+    ref="terminalRef"
+    class="h-full w-full overflow-hidden"
+    title="複製/貼上：Ctrl+Shift+C 複製選取 · Ctrl+Shift+V 貼上 · 右鍵複製或貼上（選取後自動複製）"
+  />
 </template>
 
 <style>
