@@ -369,6 +369,10 @@ interface MaestroApi {
     input: (ptyId: string, data: string) => void;
     resize: (ptyId: string, cols: number, rows: number) => void;
   };
+  clipboard: {
+    read: () => Promise<string>;
+    write: (text: string) => Promise<{ success: boolean }>;
+  };
   projectSync: {
     start: (params: { projectId: string; workDir: string }) => Promise<{ success: boolean }>;
     stop: (params: { projectId: string }) => Promise<{ success: boolean }>;

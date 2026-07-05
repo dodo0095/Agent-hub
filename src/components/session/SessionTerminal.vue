@@ -13,6 +13,13 @@ const props = defineProps<{
 
 const ipc = useIpc();
 const terminalRef = ref<HTMLDivElement | null>(null);
+
+// Right-click context menu state (rendered via Teleport to body).
+const menuVisible = ref(false);
+const menuX = ref(0);
+const menuY = ref(0);
+const menuHasSelection = ref(false);
+
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let resizeObserver: ResizeObserver | null = null;
@@ -25,26 +32,83 @@ let onContextMenu: ((event: MouseEvent) => void) | null = null;
 // Injected from SessionsView — bumped when a collapsed group expands
 const refitSignal = inject<Ref<number>>('terminalRefitSignal', ref(0));
 
-/** Copy current terminal selection to the system clipboard (no-op if empty). */
+/**
+ * Copy current terminal selection to the system clipboard (no-op if empty).
+ * Uses Electron's native clipboard via IPC — the renderer's navigator.clipboard
+ * is blocked by default Electron permissions and fails silently.
+ */
 async function copySelection(): Promise<void> {
   if (!terminal || !terminal.hasSelection()) return;
   const text = terminal.getSelection();
   if (!text) return;
   try {
-    await navigator.clipboard.writeText(text);
+    await ipc.writeClipboard(text);
   } catch {
-    // Clipboard may reject (permissions / focus); never crash the terminal.
+    // Never crash the terminal on clipboard failure.
   }
 }
 
-/** Read clipboard text and send it to the PTY as input (paste). */
+/** Read clipboard text (native Electron clipboard) and send it to the PTY as input (paste). */
 async function pasteFromClipboard(): Promise<void> {
   try {
-    const text = await navigator.clipboard.readText();
+    const text = await ipc.readClipboard();
     if (text) ipc.ptyInput(props.ptyId, text);
   } catch {
-    // Clipboard read may reject; silently ignore.
+    // Silently ignore clipboard read failures.
   }
+}
+
+/** Open the right-click context menu at the cursor, clamped to the viewport. */
+function openContextMenu(event: MouseEvent): void {
+  menuHasSelection.value = !!terminal?.hasSelection();
+  // Clamp so the menu stays on-screen (menu is ~160px wide, ~150px tall).
+  const menuW = 170;
+  const menuH = 160;
+  menuX.value = Math.min(event.clientX, window.innerWidth - menuW);
+  menuY.value = Math.min(event.clientY, window.innerHeight - menuH);
+  menuVisible.value = true;
+  window.addEventListener('mousedown', onWindowMouseDown, true);
+  window.addEventListener('keydown', onWindowKeyDown, true);
+}
+
+function closeContextMenu(): void {
+  if (!menuVisible.value) return;
+  menuVisible.value = false;
+  window.removeEventListener('mousedown', onWindowMouseDown, true);
+  window.removeEventListener('keydown', onWindowKeyDown, true);
+}
+
+function onWindowMouseDown(event: MouseEvent): void {
+  // Any click outside the menu dismisses it.
+  const target = event.target as HTMLElement | null;
+  if (target && target.closest('.terminal-context-menu')) return;
+  closeContextMenu();
+}
+
+function onWindowKeyDown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') closeContextMenu();
+}
+
+function menuCopy(): void {
+  void copySelection();
+  closeContextMenu();
+}
+
+function menuPaste(): void {
+  void pasteFromClipboard();
+  closeContextMenu();
+}
+
+function menuSelectAll(): void {
+  terminal?.selectAll();
+  terminal?.focus();
+  closeContextMenu();
+}
+
+function menuClear(): void {
+  terminal?.clear();
+  terminal?.focus();
+  closeContextMenu();
 }
 
 function createTerminal() {
@@ -111,14 +175,10 @@ async function initTerminal() {
     void copySelection();
   });
 
-  // Right-click: copy when there is a selection, otherwise paste.
+  // Right-click: open a context menu (copy / paste / select all / clear).
   onContextMenu = (event: MouseEvent) => {
     event.preventDefault();
-    if (terminal?.hasSelection()) {
-      void copySelection();
-    } else {
-      void pasteFromClipboard();
-    }
+    openContextMenu(event);
   };
   terminalRef.value.addEventListener('contextmenu', onContextMenu);
 
@@ -233,6 +293,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   alive = false;
+  closeContextMenu();
   if (writeRafId !== null) cancelAnimationFrame(writeRafId);
   writeRafId = null;
   writeBuffer = '';
@@ -247,6 +308,7 @@ onBeforeUnmount(() => {
 });
 
 function reinit() {
+  closeContextMenu();
   if (onContextMenu && terminalRef.value) {
     terminalRef.value.removeEventListener('contextmenu', onContextMenu);
   }
@@ -277,8 +339,52 @@ defineExpose({
   <div
     ref="terminalRef"
     class="h-full w-full overflow-hidden"
-    title="複製/貼上：Ctrl+Shift+C 複製選取 · Ctrl+Shift+V 貼上 · 右鍵複製或貼上（選取後自動複製）"
+    title="複製/貼上：Ctrl+Shift+C 複製選取 · Ctrl+Shift+V 貼上 · 右鍵開啟選單（選取後自動複製）"
   />
+
+  <Teleport to="body">
+    <div
+      v-if="menuVisible"
+      class="terminal-context-menu"
+      :style="{ left: menuX + 'px', top: menuY + 'px' }"
+      role="menu"
+    >
+      <button
+        type="button"
+        class="terminal-context-menu__item"
+        role="menuitem"
+        :disabled="!menuHasSelection"
+        @click="menuCopy"
+      >
+        複製<span class="terminal-context-menu__hint">Ctrl+Shift+C</span>
+      </button>
+      <button
+        type="button"
+        class="terminal-context-menu__item"
+        role="menuitem"
+        @click="menuPaste"
+      >
+        貼上<span class="terminal-context-menu__hint">Ctrl+Shift+V</span>
+      </button>
+      <div class="terminal-context-menu__sep" role="separator" />
+      <button
+        type="button"
+        class="terminal-context-menu__item"
+        role="menuitem"
+        @click="menuSelectAll"
+      >
+        全選
+      </button>
+      <button
+        type="button"
+        class="terminal-context-menu__item"
+        role="menuitem"
+        @click="menuClear"
+      >
+        清除
+      </button>
+    </div>
+  </Teleport>
 </template>
 
 <style>
@@ -287,5 +393,61 @@ defineExpose({
 .xterm {
   height: 100%;
   padding: 4px;
+}
+
+/* Right-click context menu (teleported to body, so styles are global). */
+.terminal-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 160px;
+  padding: 4px;
+  background: #1a1c26;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  color: #e4e4f0;
+  user-select: none;
+}
+
+.terminal-context-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.terminal-context-menu__item:hover:not(:disabled) {
+  background: #0066cc;
+  color: #ffffff;
+}
+
+.terminal-context-menu__item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.terminal-context-menu__hint {
+  font-size: 11px;
+  color: #8b8da3;
+}
+
+.terminal-context-menu__item:hover:not(:disabled) .terminal-context-menu__hint {
+  color: #cfe0ff;
+}
+
+.terminal-context-menu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: #2a2d3a;
 }
 </style>

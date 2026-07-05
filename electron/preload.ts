@@ -277,6 +277,10 @@ export interface MaestroApi {
     input: (ptyId: string, data: string) => void;
     resize: (ptyId: string, cols: number, rows: number) => void;
   };
+  clipboard: {
+    read: () => Promise<string>;
+    write: (text: string) => Promise<{ success: boolean }>;
+  };
   projectSync: {
     start: (params: { projectId: string; workDir: string }) => Promise<{ success: boolean }>;
     stop: (params: { projectId: string }) => Promise<{ success: boolean }>;
@@ -458,6 +462,10 @@ const api: MaestroApi = {
   pty: {
     input: (ptyId, data) => ipcRenderer.send('pty:input', { ptyId, data }),
     resize: (ptyId, cols, rows) => ipcRenderer.send('pty:resize', { ptyId, cols, rows }),
+  },
+  clipboard: {
+    read: () => ipcRenderer.invoke('clipboard:read'),
+    write: (text) => ipcRenderer.invoke('clipboard:write', text),
   },
   on: {
     sessionEvent: (callback) => {

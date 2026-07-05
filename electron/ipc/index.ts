@@ -16,6 +16,7 @@ import { registerHarnessLogHandlers } from './harness-logs';
 import { registerPitfallHandlers } from './pitfall';
 import { registerMessageHandlers } from './messages';
 import { registerMemoryHandlers } from './memory';
+import { registerClipboardHandlers } from './clipboard';
 
 export function registerAllHandlers(): void {
   registerSystemHandlers();
@@ -36,4 +37,5 @@ export function registerAllHandlers(): void {
   registerPitfallHandlers();
   registerMessageHandlers();
   registerMemoryHandlers();
+  registerClipboardHandlers();
 }

@@ -490,6 +490,15 @@ export function useIpc() {
     maestro.pty.resize(ptyId, cols, rows);
   }
 
+  // Clipboard (native Electron clipboard via main process)
+  async function readClipboard() {
+    return maestro.clipboard.read();
+  }
+
+  async function writeClipboard(text: string) {
+    return maestro.clipboard.write(text);
+  }
+
   // Event listeners
   function onSessionEvent(callback: (data: unknown) => void) {
     maestro.on.sessionEvent(callback);
@@ -623,6 +632,8 @@ export function useIpc() {
     // PTY
     ptyInput,
     ptyResize,
+    readClipboard,
+    writeClipboard,
     // Gates
     createGate,
     listGates,

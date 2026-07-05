@@ -139,6 +139,10 @@ export const IpcChannels = {
   PTY_INPUT: 'pty:input',
   PTY_RESIZE: 'pty:resize',
 
+  // Clipboard
+  CLIPBOARD_READ: 'clipboard:read',
+  CLIPBOARD_WRITE: 'clipboard:write',
+
   // Messages
   MESSAGE_SEND: 'message:send',
   MESSAGE_LIST: 'message:list',
