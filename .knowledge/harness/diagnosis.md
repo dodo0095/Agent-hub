@@ -16,8 +16,8 @@
 
 ### 漏 2：固定注入疊層裡的重複規則
 
-- **症狀**: 每個 session 的固定開銷 = 根目錄 CLAUDE.md（56 行）＋專案 CLAUDE.md（84 行）＋ SessionStart 注入（實測 4.3KB / 上限 6KB）＋ AgentHub agent 定義 system prompt（如 project-lead.md 1.4KB）。同一條規則（如 IPC 四方同步、完成=證據）同時出現在 CLAUDE.md、踩坑快速參考表、決策表三處。
-- **證據**: 實測 `wc`：quickref 注入段 3,106 chars、決策摘要注入段 1,196 chars；「IPC 四方同步」在三份文件各出現一次。
+- **症狀**: 每個 session 的固定開銷 = 根目錄 CLAUDE.md（改寫前 56 行→改寫後 63 行）＋專案 CLAUDE.md（改寫前 84 行→改寫後 56 行）＋ SessionStart 注入（實測 4.3KB / 上限 6KB）＋ AgentHub agent 定義 system prompt（如 project-lead.md 1.4KB）。同一條規則重複多處：「完成=證據」出現在 CLAUDE.md、決策表核心摘要、踩坑快速參考表**三**處；「IPC 四方同步」出現在 CLAUDE.md 與快速參考表**兩**處。
+- **證據**: 實測 `wc`：quickref 注入段 3,106 chars、決策摘要注入段 1,196 chars；重複計數經 2026-07-06 對抗審查 `grep -rn "四方同步"` 校正（初稿誤記為三處）。
 - **修法**: CLAUDE.md 改寫原則「**一條規則只活在一個地方，其他地方只放一行路由**」（2026-07-06 已套用）；注入段行數上限與精簡時機見 `maintenance-protocol.md`。
 - **注意**: 4 條致命規則（文件即法律 / 四方同步 / 不猜 / 完成=證據）的重複是**故意的防禦性冗餘**（hook 注入失敗時 CLAUDE.md 仍在），不要為了省 token 刪掉。
 
@@ -74,7 +74,7 @@
 
 ```bash
 wc -l CLAUDE.md ../../../CLAUDE.md .knowledge/decision-tables.md .knowledge/postmortem-log.md
-# → 84 / 56 / 124 / 326
+# → 84 / 56 / 124 / 326   ← 此為本 session「改寫前」基準；CLAUDE.md 改寫後為 56 / 63（2026-07-06 審查後複測）
 awk '/QUICKREF:START/,/QUICKREF:END/' .knowledge/postmortem-log.md | wc -c   # → 3106
 awk '/INJECT:START/,/INJECT:END/' .knowledge/decision-tables.md | wc -c      # → 1196
 wc -l agents/definitions/*/*.md | tail -1    # → 7217 total

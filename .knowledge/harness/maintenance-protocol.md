@@ -17,7 +17,7 @@
 | `decision-tables.md` | **追加**符合表 7 條件的 if-then 行（新增可以；修改或刪除既有規則屬紅區） |
 | `.knowledge/harness/letter-to-future-sessions.md` | 追加交接段（只加不刪） |
 | `.tasks/`、`proposal/` | 照既有 skill 流程 |
-| 明顯失效的路徑／typo（任何檔案） | 可修，但 commit message 必須附證據（如 `ls` 證明舊路徑不存在） |
+| 明顯失效的路徑／typo（任何檔案） | 可修，但「明顯」的操作定義 = **指令輸出可證明的失效**（路徑不存在、指令已改名、行號指錯），commit message 附該輸出。門檻數字、規則語意、你覺得拗口的措辭**都不算 typo**，屬黃區 |
 
 ### 黃區——先提案，老闆同意才改（提案 = 引原文＋改後全文＋一句理由）
 
@@ -63,6 +63,7 @@
 
 | 日期 | 檔案 | 動作 | 誰／哪個 session |
 |------|------|------|----------------|
+| 2026-07-06 | harness/ 六檔＋decision-tables 表 7＋根 CLAUDE.md | 對抗審查修正（findings 見 harness/review-findings-2026-07-06.md，A-1~A-3、C-1~C-4、D、E-1~E-2 全數修復） | Fable 5 制度建設 session |
 | 2026-07-06 | harness/ 全套六檔＋兩份 CLAUDE.md 改寫 | 初版建立 | Fable 5 制度建設 session |
 
 ## 5. 精簡時機（膨脹是制度的慢性死因）
