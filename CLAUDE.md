@@ -1,84 +1,56 @@
 # AgentHub — Agent 指南（索引）
 
-> 本文件是地圖，不是百科全書。詳細規範見索引指向的 .knowledge/ 文件。
-> **所有 Agent 執行任務前必須先閱讀本文件，再依索引查閱對應文件。**
+> 本文件是地圖，不是百科全書。原則：**一條規則只活在一個地方，這裡只放路由**（4 條致命規則例外，屬防禦性冗餘）。
+> **所有 Agent 執行任務前必須先讀本文件，再依「按情境路由」表查對應文件。**
 
-## 執行環境
-- OS: Windows 11，無 WSL；Shell: bash (Git Bash)。cmd.exe、python3、findstr、PowerShell 不可用
-- Python: `C:\Users\Bandai\anaconda3\python.exe`（用 `python` 不是 `python3`）；Node: `C:\Program Files\nodejs\node.exe`
-- 不要用 findstr，改用 grep
+## 執行環境（Windows 陷阱——錯了會觸發重試迴圈）
+- OS: Windows 11，無 WSL；Shell: bash (Git Bash)。**禁用** cmd.exe、PowerShell 語法、findstr、python3
+- Python: `C:\Users\Bandai\anaconda3\python.exe`（叫 `python`）；Node: `C:\Program Files\nodejs\node.exe`
+- 路徑常含空格（`ALL PROJECT`），指令中的路徑一律加雙引號
 
 ## 專案簡介
-- **AgentHub (Maestro v2)** — Electron 桌面應用，AI Agent 團隊管理平台
-- 核心價值: 用 Harness（Skill + Hook + FileWatcher）驅動虛擬開發公司，GUI 只做監控和 3 個操作
-- 用戶: 老闆（一人公司創辦人）
+- **AgentHub (Maestro v2)** — Electron 桌面應用，AI Agent 團隊管理平台；用戶 = 老闆（一人公司創辦人）
+- 核心價值: 用 Harness（Skill + Hook + FileWatcher）驅動虛擬開發公司，GUI 只做監控
 
 ## 最高原則（4 條致命規則）
-
-1. **文件就是法律** — 程式碼必須與規範文件一致，不一致以文件為準 → `.knowledge/doc-governance.md`
+1. **文件就是法律** — 程式碼與規範不一致時，以文件為準 → `.knowledge/doc-governance.md`
 2. **IPC 四方同步** — `ipc.ts` → `preload.ts` → `useIpc.ts` → `env.d.ts` 缺一不可 → `.knowledge/architecture.md`
-3. **不確定就去讀，不要猜** — 不得憑空想像資料結構或 API 格式 → `.knowledge/coding-standards.md` ＋ `.knowledge/decision-tables.md` 表 4
-4. **完成 = 證據** — 宣告完成前跑 `node scripts/preflight.cjs` 並貼輸出；證據等級查 `.knowledge/decision-tables.md` 表 1。需要「判斷」的時刻（除錯熔斷、升級、警報回應）一律先查決策表，不靠感覺
+3. **不確定就去讀，不要猜** — 每種問題該讀哪個真相來源，查 `.knowledge/decision-tables.md` 表 4
+4. **完成 = 證據** — 宣告完成前跑 `node scripts/preflight.cjs` 貼輸出；證據等級查 decision-tables 表 1
 
-> ※ 硬約束由 Hook 強制（見 `.claude/settings.json`）：kill-port / --no-verify / force push main（forbidden-commands）、寫入 Verify clone（protect-verify-clone）、部署前 typecheck+build（g5）、Stop 時 lint+typecheck（stop-validator）、SessionStart 自動注入教訓摘要（session-start-context）
+> 硬約束由 hook 強制（清單見 `.claude/settings.json`）；SessionStart 自動注入決策摘要與踩坑快速參考，不需要自己背。
+
+## 模型調度與委派（指揮官必讀）
+- **指揮官不下場**：大量讀取、掃 repo、查網頁、批次改檔一律派 subagent，主對話只收結論與 `檔案:行號`
+- 派工前抄模板：`.knowledge/harness/delegation-templates.md`；完整守則：`.knowledge/harness/model-dispatch.md`
+- **驗收不自驗**：完成宣告由 fresh-context agent 驗證，方法見 model-dispatch「驗證不自驗」節
 
 ## 兩份 Clone（獨立 repo，非 worktree）
-
 | 路徑 | 角色 | Agent 可否寫入 |
 |------|------|:--:|
-| `ALL PROJECT\Agent-hub\` | **Dev** — 所有開發、測試、commit 都在這；feature 分支 merge 回 main | ✅ |
+| `ALL PROJECT\Agent-hub\` | **Dev** — 所有開發、測試、commit 都在這 | ✅ |
 | `Desktop\AgentHub\Agent-hub\` | **Verify-only** — 老闆 `git pull` 驗證用 | ❌（hook 硬擋） |
 
-流程：Agent 在 Dev 開分支（`agent/<id>/...`，base main）→ 測試 → commit → merge main → push → 老闆在 Verify pull。
+流程：Dev 開分支（`agent/<id>/...`，base main）→ 測試 → commit → merge main → push → 老闆在 Verify pull。多 session 一律用 worktree 隔離（PM-008）。
 
 ## 常用指令
-
 ```bash
 npm run dev / test / lint / typecheck / build
 node scripts/preflight.cjs          # 完成證據產生器（/task-done 前必跑）
-node scripts/smoke-test-hooks.cjs   # 修改 hook 後必跑
+node scripts/smoke-test-hooks.cjs   # 修改 hook 後必跑（修改前先查 decision-tables 表 7 前置條件）
 ```
 
-> **修改 `.claude/hooks/*.js` 鐵律**（PM-009/013）：攔截邏輯抽成可 export 函數＋`tests/hooks/` false-positive 測試；改完跑 hook 測試＋煙霧測試；hook 內 npm/git 用完整路徑（hook 環境 PATH 沒有 npm）。
+## 按情境路由（先查這張表，再讀對應文件）
+| 你正要… | 先讀 |
+|---------|------|
+| 做需要「判斷」的事（除錯熔斷、升級、警報回應、完成標準） | `.knowledge/decision-tables.md`（查表執行，不靠感覺） |
+| 開工前想知道有沒有人踩過這個坑 | `.knowledge/postmortem-log.md` 頂部快速參考表 |
+| 派任務給 subagent、選模型 | `.knowledge/harness/model-dispatch.md` ＋ `delegation-templates.md` |
+| 拿不準：要不要升級模型／停下來問老闆／換路不重試 | `.knowledge/harness/judgment-rubrics.md` |
+| 修改 CLAUDE.md、hook、`.knowledge/` 制度檔案 | `.knowledge/harness/maintenance-protocol.md`（先查權限分級） |
+| 了解 harness 已知弱點與歷史脈絡 | `.knowledge/harness/diagnosis.md`、`letter-to-future-sessions.md` |
 
-## 專案文件索引
-
-### 專案級規範（.knowledge/）
-
-| 文件 | 用途 |
-|------|------|
-| `.knowledge/decision-tables.md` | **決策表：證據等級、除錯熔斷、升級界線、警報回應**（判斷前先查） |
-| `.knowledge/postmortem-log.md` | **踩坑快速參考（必讀）** + 歷史紀錄 PM-001~013 |
-| `.knowledge/project-overview.md` | 專案概述、目標、技術棧、v1→v2 變更摘要 |
-| `.knowledge/architecture.md` | 系統架構、服務清單、IPC 規則、Cost Tracking、Worktree 隔離 |
-| `.knowledge/directory-structure.md` | 目錄結構詳細說明 |
-| `.knowledge/coding-standards.md` | 編碼規範、命名、Commit 紀律、禁止憑空想像 |
-| `.knowledge/testing-standards.md` | 測試策略與規範 |
-| `.knowledge/quality-checklist.md` | G0-G6 品質檢查清單 |
-| `.knowledge/doc-governance.md` | 文件治理 8 條完整規則 |
-| `.knowledge/team-hierarchy.md` | 團隊架構、指揮鏈、Sprint 概覽 |
-| `.knowledge/company-rules.md` | 公司共用規則（文件層級、命名骨架、依賴規則） |
-| `.knowledge/team-workflow.md` | 公司共用流程（Sprint、Gate、Review、上線/回滾） |
-| `.knowledge/design-system.md` | UI 設計系統 token 與元件規範 |
-| `.knowledge/postmortem-common.md` | 跨專案共通踩坑 |
-
-### 學術研究部門（.knowledge/academic/ + .knowledge/specs/）
-
-| 文件 | 用途 |
-|------|------|
-| `academic/agent-prompts.md` | 7 位學術 Agent System Prompt |
-| `academic/venue-list.md` | 期刊 + 研討會清單 |
-| `academic/scholar-profile.md` | 老闆學者檔案、自引清單 |
-| `academic/sop-{journal,conference,peer-review,nstc-grant}.md` | 四條學術工作流程 SOP |
-| `specs/api-design.md` | Skill 命名規範、frontmatter 格式 |
-| `specs/data-model.md` | Agent-Skill 綁定表 |
-| `specs/feature-spec.md` | 四條工作流程功能規格 |
-
-### 公司規範（.knowledge/company/）
-
-| 文件 | 用途 |
-|------|------|
-| `company/sop/{sprint-planning,code-review}.md` | Sprint 規劃 / Code Review SOP |
-| `company/standards/*.md` | 公司編碼/API/品質標準、子專案共用規則與流程 |
-| `company/templates/*.template` | Sprint 提案書 / 開發計畫書 / 內部審查報告 / 決策表範本 |
-| `company/hook-templates/session-start-context.js.template` | SessionStart 教訓注入 hook 範本（供子專案傳播） |
+## 文件索引（依需查閱，不必預讀）
+- **專案規範（`.knowledge/`）**: `project-overview`（概述與技術棧）· `architecture`（系統架構、IPC、Cost Tracking）· `directory-structure` · `coding-standards` · `testing-standards` · `quality-checklist`（G0-G6）· `doc-governance`（文件治理 8 條）· `design-system`（UI token）· `team-hierarchy` · `company-rules` · `team-workflow`（Sprint／Gate／Review）· `postmortem-common`（跨專案踩坑）
+- **學術研究部門**: `.knowledge/academic/`（7 位學術 Agent prompt、venue 清單、學者檔案、SOP ×4）＋ `.knowledge/specs/`（api-design ／ data-model ／ feature-spec）
+- **公司層（`.knowledge/company/`）**: SOP、standards、templates、hook-templates。制度推廣到其他子專案用 `/knowledge-feedback`，不要手動 cp
