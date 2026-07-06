@@ -117,7 +117,8 @@
 | 想做的事 | 前置條件 |
 |---------|---------|
 | 新增 / 修改會 block 的 hook | (a) 確認**目前基準線能過**；(b) 攔截邏輯抽成可 export 函數；(c) `tests/hooks/` 加 false-positive 測試；(d) `scripts/smoke-test-hooks.cjs` 加案例；(e) hook 內呼叫 npm/git 用完整路徑 |
-| 加規則進 CLAUDE.md | 先問「能不能改用 hook 強制」（能就不要靠 prompt）；CLAUDE.md 總行數 ≤ 100 的索引原則不可破 |
+| 加規則進 CLAUDE.md | 先問「能不能改用 hook 強制」（能就不要靠 prompt）；CLAUDE.md 總行數 ≤ 100 的索引原則不可破；**另需過 `harness/maintenance-protocol.md` 黃區審批（老闆同意才改）** |
+| 修改 `.knowledge/harness/**` 制度檔案 | 先查 `harness/maintenance-protocol.md` 權限分級（綠／黃／紅區），照它的修改流程走 |
 | 加內容進本文件 | 必須是「查表可執行」的 if-then；且評估是否進「核心摘要」注入段（注入段 ≤ 15 行，每行都佔所有未來 session 的 context） |
 | 加內容進踩坑快速參考表 | 一行寫得完的「場景 → 規則」才進表；寫不完的留在詳細紀錄 |
 | 新增 `.claude/commands/` | frontmatter 不得含 `disable-model-invocation: true`（PM-007） |

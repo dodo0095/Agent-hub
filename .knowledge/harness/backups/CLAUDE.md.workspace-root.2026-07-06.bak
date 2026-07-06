@@ -1,0 +1,56 @@
+# ALL PROJECT — 工作區根目錄指南
+
+> **這裡不是一個專案，是 14 個獨立專案的工作區根目錄。**
+> 本檔案只做一件事：把你導向正確的子專案規範。
+
+---
+
+## 第一條規則：先定位，再讀規範
+
+1. 執行 `pwd` 確認你在哪個子專案目錄
+2. **讀該子專案自己的 `CLAUDE.md`**——那才是你的法律，本檔案只是路標
+3. 子專案規範與本檔案衝突時，**一律以子專案為準**
+4. 若子專案沒有 `CLAUDE.md`（見下表 ❌），先讀根目錄 `.knowledge/company-rules.md`，並建議跑 `/project-kickoff` 補齊
+
+## 子專案索引
+
+| 目錄 | 有自己的 CLAUDE.md |
+|------|:--:|
+| `Agent-hub` | ✅（Electron 桌面應用，AI Agent 管理平台） |
+| `StarkLab` | ✅ |
+| `academic_paper` | ✅ |
+| `fintech_web` | ✅ |
+| `gen-ai content` | ✅ |
+| `mail_sort` | ✅ |
+| `moive_str` | ✅ |
+| `pythonPodcastLLM-workspace` | ✅ |
+| `starklab_month_strategy` | ✅ |
+| `voice` | ✅ |
+| `AI_From_Assistance_to_Internalization` | ❌ |
+| `ETF-bot` | ❌ |
+| `Investment_book` | ❌ |
+| `finanical_Column` | ✅（台股週報自動化系統，方格子財經專欄） |
+
+## 全工作區皆為真的環境事實
+
+- OS: Windows 11，無 WSL；Shell 是 Git Bash
+- `python`（不是 `python3`）：`C:\Users\Bandai\anaconda3\python.exe`
+- Node.js: `C:\Program Files\nodejs\node.exe`（PATH 可能缺，必要時用完整路徑）
+- 不要用 `findstr` / `cmd.exe` / PowerShell 專屬語法，用 `grep` 與 POSIX 語法
+- 各子專案各自是獨立 git repo，根目錄本身不是 repo
+
+## 根目錄共用知識（`.knowledge/`）
+
+| 文件 | 內容 |
+|------|------|
+| `company-rules.md` | 文件治理、禁止憑空想像、命名骨架、Commit 紀律 |
+| `team-workflow.md` | 團隊架構、指揮鏈、Sprint 流程、Gate、Review |
+| `postmortem-common.md` | 跨專案共通踩坑 |
+| `architecture.md` | 工作區層級架構說明 |
+
+## 跨專案鐵律（子專案不可覆蓋）
+
+1. **不確定就去讀原始碼，不要猜**——任何資料結構、API 格式都有真相來源
+2. **宣告完成必附實際執行過的證據**——指令＋輸出摘要；沒有證據 = 沒有完成
+3. **踩坑當下就記錄**（`/pitfall-record`），含「待修」項目必須同時建 backlog 任務
+4. **不硬編碼機密**——密碼、API Key 一律環境變數
