@@ -125,6 +125,136 @@ Task A（frontend-dev）完成
 
 ---
 
+## 成本與用量計算
+
+AgentHub 以「Session」為單位計算每次 Agent 執行花了多少 token 與金額。整套機制不靠估算，而是直接讀取 **Claude 官方用來計費的原始資料**。
+
+### 真相來源：Claude Code 的 JSONL 對話日誌
+
+Claude Code 會把每一段對話寫成一個 JSONL 檔：
+
+```
+~/.claude/projects/<編碼後的工作目錄>/<conversation-id>.jsonl
+```
+
+檔案裡每一個 `assistant` 事件都帶有一個精確的 `usage` 欄位，這就是 Claude 自己用來計費的數字，也是我們計算的唯一依據（不解析終端機畫面、不做估算）。
+
+> 為什麼不用 statusLine？Claude Code v2.1.114 起 `--settings` 注入的 `statusLine` 不再被採用，因此改以 JSONL 為權威來源（見 `electron/services/jsonl-usage-tracker.ts` 檔頭說明）。
+
+### 四種 Token
+
+每個 `assistant` 事件的 `usage` 會拆成四類 token，各自有不同的計價：
+
+| Token 類型 | JSONL 欄位 | 說明 |
+|-----------|-----------|------|
+| 輸入 | `input_tokens` | 本輪新送進模型的 token |
+| 輸出 | `output_tokens` | 模型生成的 token |
+| 快取寫入 | `cache_creation_input_tokens` | 寫入 prompt cache 的 token（可再細分 5 分鐘 / 1 小時 TTL） |
+| 快取讀取 | `cache_read_input_tokens` | 命中 prompt cache、從快取讀回的 token（最便宜） |
+
+快取寫入若日誌有提供 `cache_creation.ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens`，會照實拆分 5m / 1h；否則整批以 5 分鐘費率計算。
+
+### 計價表（USD / 每百萬 token）
+
+定價集中在 `electron/services/pricing.ts`，realtime 計算與開機補登共用同一份，避免重複。快取費率遵循 Anthropic prompt-caching 規則：**快取寫入(5m) = 輸入 ×1.25、快取寫入(1h) = 輸入 ×2、快取讀取 = 輸入 ×0.10**。
+
+| 模型家族 | 輸入 | 輸出 | 快取寫入 5m | 快取寫入 1h | 快取讀取 |
+|---------|-----:|-----:|-----------:|-----------:|--------:|
+| Sonnet（4 / 4-5 / 4-6） | 3 | 15 | 3.75 | 6 | 0.30 |
+| Opus（4 / 4-1 / 4-5 / 4-6 / 4-7） | 15 | 75 | 18.75 | 30 | 1.50 |
+| Haiku 4-5 | 1 | 5 | 1.25 | 2 | 0.10 |
+| Haiku 3-5 | 0.80 | 4 | 1.00 | 1.60 | 0.08 |
+
+模型字串比對順序：**精確比對 → 前綴比對**（例如帶日期後綴的 `claude-sonnet-4-6-20250101`）**→ 家族 fallback**（字串含 opus / haiku / sonnet）**→ 預設 Sonnet-4-6**。
+
+### 公式
+
+單一 Session 的成本，是把該對話所有 `assistant` 事件的四類 token **依「使用當下的模型」分別累加**，再各自套用計價表後相加（因此同一 Session 中途換模型也能正確計價）：
+
+```
+cost = Σ(每個模型) [
+          in   × price.input
+        + out  × price.output
+        + cc5m × price.cacheCreate5m
+        + cc1h × price.cacheCreate1h
+        + cr   × price.cacheRead
+       ] ÷ 1,000,000
+```
+
+其中 `in / out / cc5m / cc1h / cr` 是該模型累加後的四類 token 數，除以一百萬是因為計價表以「每百萬 token」為單位。最終金額四捨五入到小數第 6 位。
+
+**實例**：一個 Sonnet-4-6 的 Session，累計 input 10,000、output 5,000、快取寫入 20,000（皆 5m）、快取讀取 100,000：
+
+```
+cost = (10,000×3 + 5,000×15 + 20,000×3.75 + 0×6 + 100,000×0.30) ÷ 1,000,000
+     = (30,000 + 75,000 + 75,000 + 0 + 30,000) ÷ 1,000,000
+     = 210,000 ÷ 1,000,000
+     = $0.21
+```
+
+### 從單輪到儀表板：三層聚合
+
+1. **單輪 → 單 Session**：`parseJsonlUsage()` 讀整個 JSONL，把所有 turn 的 token 加總並套上式計價，得到該 Session 的 `cost_usd / input_tokens / output_tokens / turns_count`。
+2. **落庫**：寫入 `claude_sessions` 資料表對應欄位（每個 Session 一列）。
+3. **統計聚合**：儀表板用 SQL `SUM(cost_usd)` 搭配 `GROUP BY agent_id / project_id / DATE(started_at)`，產出 Per-Agent、Per-Project、14 天每日趨勢等視圖。
+
+### 何時計算（資料新鮮度）
+
+| 時機 | 機制 | 說明 |
+|------|------|------|
+| Session 執行中 | 每 5 秒輪詢 | 重新解析整個 JSONL，以 **max-wins** 合併（JSONL 數字單調遞增，取較大值），即時推 `usage_update` 事件更新 UI |
+| Session 結束 | `persistSessionCost()` | 將最終用量寫入 DB |
+| App 啟動 | Cost Backfill | 掃 `~/.claude/projects/*.jsonl`，對近 7 天 `cost_usd=0` 的 Session 用 ±120 秒時間窗 greedy match 補回正確費用（涵蓋 App 未開時 CLI 直接跑的 Session） |
+
+> ⚠️ 快取寫入的 5m / 1h 若日誌未細分，會近似以 5 分鐘費率計算，與真實帳單誤差約在 5% 以內。
+
+**相關檔案**：`electron/services/pricing.ts`（計價表）、`jsonl-usage-tracker.ts`（解析與公式）、`session-cost-tracker.ts`（落庫）、`cost-backfill.ts`（開機補登）、`electron/ipc/sessions.ts`（儀表板聚合查詢）。
+
+---
+
+## 常見問題（FAQ）
+
+### Q：為什麼用 hub，Claude 的 token 用量比 claude.ai 網頁版燒得快很多？
+
+這是 **agentic 工具的正常特性，不是 bug**。同樣一件事，網頁版「看不到」花費所以無感，hub 把每一顆 token 精算成金額攤在你面前，所以顯得兇。原因由大到小如下：
+
+**1. 計費模型不同（最大的認知落差）**
+claude.ai 網頁（Pro / Max）是**訂閱吃到飽**，從不顯示每則訊息的 token 或金額；hub 驅動的是 Claude Code，會逐 token 計算並攤開給你看（計價方式見上方「成本與用量計算」）。**不是 hub 比較貴，是網頁把成本藏起來了。**
+
+**2. Agent 一個任務 = 幾十輪來回，不是一問一答**
+網頁是你打一句、它答一句。hub 的 Agent 會自己讀檔 → 跑指令 → 改檔 → 再讀 → 驗證……一個任務常是幾十個 tool-call 往返。**關鍵：每一輪都會把「到目前為止的完整對話」整包重送給模型**，所以 input token 隨輪數累積膨脹——越後面的輪次，每輪夾帶的 context 越大（不是線性成長）。
+
+**3. 每一輪都背著龐大的固定開銷（網頁版幾乎沒有）**
+- **System prompt**：角色定義、公司規範、同事清單、SendMessage 指引
+- **工具定義 schema**：Read / Edit / Bash / Grep / Glob / Task / MCP… 每輪都送一次
+- **專案注入**：`CLAUDE.md`、SessionStart hook 灌入的決策表與踩坑表
+- **依賴任務輸出、跨 Session 記憶**：spawn 時一併注入
+
+純聊天的網頁版幾乎沒有這些，但對 Agent 而言每一輪都是實打實的 input token。
+
+**4. 檔案內容與指令輸出會留在 context**
+每次 Read 一個檔、每次 Bash 輸出、每次 Grep 結果都會進 context，並在**後續每一輪重送**。掃整個 repo、讀大檔會讓 input token 暴衝。
+
+**5. 顯示的 token 數含快取（cache）token**
+hub 照實把 `cache_creation` + `cache_read` 也算進 token 總數。Claude Code 大量使用 prompt caching，所以 `cache_read` 數字通常是所有欄位裡最大的——但**快取讀取單價只有輸入的 1/10**（見計價表），它讓「token 數字」看起來很大，對**金額**的貢獻其實很小。網頁版從不顯示這些，所以你在 hub 看到的 token 數天生就比網頁「感覺到」的大一個量級。
+
+**6. 多 Agent 並行**
+hub 是一間虛擬公司：多個 Agent 各自 spawn session、互相委派、發訊息。全公司加總的用量本來就遠高於你一個人在網頁聊天。
+
+### Q：那 hub 顯示的金額是我實際會被收的錢嗎？
+
+顯示的是**依 Anthropic 官方每百萬 token 費率換算的 API 等值成本**，數字直接來自 Claude 官方的 JSONL 計費日誌，可佐證。實際帳單取決於你的登入 / 計費方式（訂閱制吃到飽 vs API key 逐量計費）；若你用訂閱制，這個金額是「若以 API 計價會是多少」的參考值，不代表額外扣款。快取 5m / 1h 若日誌未細分會以 5m 費率近似，與真實帳單誤差約 5% 以內。
+
+### Q：怎麼降低用量 / 省 token？
+
+- **任務描述講清楚**：減少 Agent 反覆試探的來回輪數（輪數是成本主因）。
+- **別叫指揮官 Agent 無腦掃大 repo**：大量讀取、掃 repo、批次改檔改派 subagent，主對話只收「結論 + 檔案:行號」（本專案「指揮官不下場」原則）。
+- **善用 prompt cache**：連續、接續的操作會命中快取，`cache_read` 最便宜。
+- **模型分級**：雜事用 Haiku / Sonnet，重推理才用 Opus——輸出單價差 5 倍。
+- **控制 context**：避免一次讀入超大檔或無關檔案，它們會在每輪重送。
+
+---
+
 ## 技術棧
 
 | 層級 | 技術 |
