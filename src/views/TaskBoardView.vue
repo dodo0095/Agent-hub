@@ -17,6 +17,14 @@ const filterProjectId = ref('');
 const filterSprintId = ref('');
 const sprints = ref<SprintRecord[]>([]);
 
+// 篩選下拉只顯示進行中的專案，隱藏已完成 / 已封存（關閉）的專案；
+// 但保留目前已選中的專案，避免與當前篩選狀態不一致。
+const selectableProjects = computed(() =>
+  projectsStore.projects.filter(
+    (p) => !['completed', 'archived'].includes(p.status) || p.id === filterProjectId.value,
+  ),
+);
+
 onMounted(async () => {
   if (projectsStore.projects.length === 0) await projectsStore.fetchAll();
   await tasksStore.fetchTasks();
@@ -102,7 +110,7 @@ const visibleColumns = computed(() =>
       >
         <option value="">{{ $t('taskboard.allProjects') }}</option>
         <option
-          v-for="project in projectsStore.projects"
+          v-for="project in selectableProjects"
           :key="project.id"
           :value="project.id"
         >
