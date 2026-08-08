@@ -3,7 +3,7 @@
     "statAgents": "代理人",
     "statRunning": "執行中",
     "statProjects": "專案",
-    "statUsage": "30 日用量",
+    "statUsage": "30 日用量 (USD)",
     "sessions30d": "{n} 個 sessions",
     "costByAgent": "Agent 成本",
     "costByProject": "專案成本",

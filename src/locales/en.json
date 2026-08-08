@@ -3,7 +3,7 @@
     "statAgents": "Agents",
     "statRunning": "Running",
     "statProjects": "Projects",
-    "statUsage": "30-Day Usage",
+    "statUsage": "30-Day Usage (USD)",
     "sessions30d": "{n} sessions",
     "costByAgent": "Cost by Agent",
     "costByProject": "Cost by Project",

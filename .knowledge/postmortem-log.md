@@ -44,6 +44,7 @@
 | happy-dom 測試環境 | 只「掛上」mock 到 window，**絕不整顆替換 window**（會毀掉 Event/performance 等原生介面） | PM-012 |
 | mock DB 查詢 | 用 SQL-aware `mockImplementation`，不用 `mockReturnValueOnce` 佇列（會把實作私有呼叫順序寫死進測試） | PM-012 |
 | 測 exposed method | 不 `vi.spyOn` exposed proxy（Vue 3.5 攔不到 template ref 呼叫），改斷言可觀察 DOM 行為 | PM-012 |
+| Stop hook 報 lint/typecheck 失敗 | 先確認是否在無 node_modules 的 worktree 執行（`npm`/`tsc` not found ≠ 檢查紅）；到有 deps 的 clone 重跑再判定 | PM-014 |
 <!-- QUICKREF:END -->
 
 ---
@@ -324,3 +325,16 @@
   5. **Stop hook 決策**: 全套測試**不**加回 Stop hook（維持 lint+typecheck 快檢），全套守門交給 CI——警報分層：快的常駐、慢的進 gate
 - **驗證**: `npm test` → **Test Files 23 passed (23), Tests 359 passed (359)**；lint 0 errors；typecheck exit 0
 - **教訓**: 三類推測有兩類只對表象。修復前先重現、看實際錯誤訊息，5 週前的診斷筆記只能當線索不能當結論
+
+### 2026-08-07 — PM-014 Stop validator 在無 deps 的 worktree 誤報 lint/typecheck 失敗
+
+| 項目 | 內容 |
+|------|------|
+| 分類 | process |
+| 問題 | Session 結束時 Stop hook（lint + typecheck validator）回報「基準線原本是綠、本 session 弄壞了」，但實際 session 只改了兩個 locale JSON。在有 node_modules 的環境重跑：typecheck exit 0、lint 0 errors（128 warnings 全為既有、與本次無關）。 |
+| 原因 | Stop validator 在當前 session 的 worktree（`.agenthub-worktrees/Agent-hub/<hash>`）內執行 `tsc`/`eslint`，但 worktree 無 `node_modules`（git 不追蹤，PM-008），導致 `npm`/`tsc` command not found → 非零退出 → hook 一律判定「失敗」。屬 PM-013「hook 永遠 block」類的假陽性警報，會對每個在 worktree 工作的 session 反覆誤射。 |
+| 解法 | 本次：在有 deps 的主 clone 重跑 typecheck（clean）+ lint（0 errors）證實無回歸，判定為環境性 false positive。根治待 backlog：Stop validator 應在偵測不到 node_modules 時 (a) 自動 fallback 到有 deps 的 clone 執行，或 (b) 先自動 `npm install`／跳過並輸出明確 SKIP 訊息，而非回報「失敗」。 |
+| 預防 | 會 block 的自動檢查必須能區分「工具跑不起來（環境問題）」與「檢查真的紅了（程式碼問題）」，command-not-found / 缺 deps 不可等同於檢查失敗。 |
+| 狀態 | open |
+| 到期日 | 2026-08-21 |
+| Backlog | `.tasks/backlog/PM-014-stop-validator-worktree-deps.md` |

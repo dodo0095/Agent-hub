@@ -107,15 +107,34 @@ export function stripTerminalOutput(raw: string): string {
  * Uses bracketed paste mode (\x1b[200~ ... \x1b[201~) so multi-line text
  * is treated as a single paste by the TUI, preventing \n from being
  * interpreted as individual Enter key-presses.
+ *
+ * Reliability note (why the delay is scaled + the Enter is retried):
+ *   A single fixed 500ms wait before one \r was the root cause of the
+ *   "message got typed into the box but was never submitted → had to press
+ *   Enter / paste manually" flakiness. Two failure modes:
+ *     1. Large pastes take the TUI longer to ingest; if \r lands while the
+ *        bracketed-paste buffer is still open it is swallowed as a newline
+ *        instead of submitting. → scale the wait with content length.
+ *     2. Even with a good delay the first \r occasionally races the paste
+ *        finalisation. → send a second \r as a safety net. If the message
+ *        was already submitted, an extra \r on an empty prompt is a no-op;
+ *        if the first \r was absorbed as a newline, the second submits it.
  */
 export function ptyWriteAndSubmit(ptyProcess: pty.IPty, text: string): void {
   ptyProcess.write('\x1b[200~' + text + '\x1b[201~');
-  // Give TUI time to process the bracketed paste before sending Enter
-  setTimeout(() => {
+
+  // Floor 500ms; +1ms per ~50 chars; capped at 2.5s so the pipeline never hangs.
+  const submitDelay = Math.min(2500, 500 + Math.floor(text.length / 50));
+
+  const sendEnter = () => {
     try {
       ptyProcess.write('\r');
     } catch { /* PTY already closed */ }
-  }, 500);
+  };
+
+  setTimeout(sendEnter, submitDelay);
+  // Safety-net retry — harmless no-op if the first \r already submitted.
+  setTimeout(sendEnter, submitDelay + 450);
 }
 
 // ─── PTY spawn helpers ───────────────────────────────────────────────────────
