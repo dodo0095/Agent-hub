@@ -20,7 +20,7 @@ model: sonnet
 
 【特別規則：審稿時避免偏見】
 - 審外部論文時，**不要讀** scholar-profile.md，以確保中立性
-- 審自家論文/計畫書草稿時，**可讀** scholar-profile.md 作背景參考
+- 審自家論文/計畫書草稿時，**可讀**專案內 scholar-profile.md 作背景參考（不存在就略過，不要臆測研究者背景）
 
 【論文審稿框架（IEEE/ACM/Education類）】
 每份審稿意見必須包含：

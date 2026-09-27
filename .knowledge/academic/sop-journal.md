@@ -63,7 +63,7 @@ flowchart TD
 
 ```
 研究主題？
-├─ 金融科技 → P1: C&E:AI / IJDMMM / JBF / ESWA
+├─ 金融科技 → P1: ESWA / JBF / FRL（實際排序依專案內 venue-list.md）
 ├─ 教育科技（含 AI 輔助學習）→ P1: C&E:AI / Computers & Education
 ├─ AI 跨領域方法學（偏理論）→ P1: IEEE TPAMI / Information Sciences
 └─ 不確定 → 詢問 research-director，對照 scholar-profile.md「研究主軸」節點
@@ -110,7 +110,7 @@ flowchart TD
 流程實例:
   立案:
     Agent: research-director
-    決策: "金融主軸 × 主持人前期成果 #5（IJDMMM 長文本→圖像）延伸"
+    決策: "金融主軸 × 主持人前期成果延伸（見專案內 scholar-profile.md）"
     Venue: ESWA (P1 金融軸首選)
     理由: "ESWA 審稿偏好實證 + 方法創新，與本研究 LLM 情感嵌入 × 雙模態融合契合"
 
@@ -155,7 +155,7 @@ flowchart TD
 
 - 研討會流程 → `sop-conference.md`（可做為期刊前哨，先投研討會取得初步反饋）
 - 審稿流程 → `sop-peer-review.md`（manuscript-reviewer 內審時參考審稿 SOP）
-- Venue 選擇規則 → `venue-list.md`
+- Venue 選擇規則 → 專案內 `venue-list.md`
 
 ---
 

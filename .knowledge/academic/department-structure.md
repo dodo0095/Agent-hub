@@ -12,11 +12,8 @@
 - **建立 Sprint**: Sprint 4（2026-04-11）
 - **成員數**: 7 位（1 L1 + 6 L2）
 - **核心使命**: 支援四條學術工作流程 —— 期刊投稿 / 研討會論文 / 論文審稿 / 國科會計畫申請
-- **主要題材**（依老闆研究主軸 2026-04-11 確認）:
-  1. **金融**（AI 金融分析：ML/NLP × Finance，延續 IJDMMM 2021 研究脈絡）
-  2. **教育**（LLM 教育應用：ChatGPT × CS Education / Learning Analytics）
-  3. **AI 跨領域應用**（AI/ML/LLM 作為方法學貫穿各領域的核心能力）
-- **題材詳細檔案**: `.knowledge/academic/scholar-profile.md`（老闆研究者檔案 + 6 篇代表論文）
+- **主要題材**: 依使用者（學者）的研究主軸而定，不寫死在 Hub
+- **題材詳細檔案**: 專案內 `.knowledge/academic/scholar-profile.md`（研究者檔案 + 代表論文；Hub 只提供範本 `scholar-profile.template.md`，找不到時請使用者建立，不得臆造）
 - **Sprint 4 E2E 測試分派**:
   - T9 期刊流程 → **金融科技**（G0 決議）
   - T10 研討會流程 → **金融科技**（G0 決議，ACM ICAIF 或 IEEE ICDM）

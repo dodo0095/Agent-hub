@@ -88,7 +88,7 @@ v2: Harness（Skill + Hook + FileWatcher）驅動一切 → GUI 只做監控
 ## 學術類 Skills（Sprint 4 新增）
 
 > **部門**：academic-research
-> **服務對象**：東吳大學資料科學系教授（邱嘉豪）
+> **服務對象**：使用者本人（學者），個人資料見專案內 `.knowledge/academic/scholar-profile.md`（Hub 僅提供範本 `scholar-profile.template.md`）
 > **整合策略**：Wrapper 模式（從 `claude-scientific-skills/scientific-skills/` 引用，50-80 行封裝）
 
 | Skill 指令 | 用途 | 原始來源 |

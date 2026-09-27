@@ -523,7 +523,7 @@ npm run lint         # ESLint 程式碼檢查
 
 ### 2026-04-13 — Sprint 4：學術研究部門
 
-- **新部門** — `academic-research` 部門上線，服務東吳大學資料科學系教授
+- **新部門** — `academic-research` 部門上線，服務學者使用者（個人研究資料放在各自專案內，不進 Hub repo）
 - **四條學術工作流程** — 期刊投稿、研討會論文、論文審稿、國科會計畫申請
 - **7 位學術 Agent** — 含 Lit Reviewer、Hypothesis Generator、Stat Analyst、Grant Writer 等
 - **知識庫** — `.knowledge/academic/` 下新增 SOP、Agent prompts、期刊清單、學者檔案

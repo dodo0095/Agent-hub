@@ -28,7 +28,7 @@ E2E 測試題材：**金融科技**（G0 決議）
   - 內容與原 SKILL.md 對齊（必要處改寫命名衝突）
 
 ### F3 - `nstc-grant.md` 自建 Skill（已存在，需驗證）
-- **狀態**: Pre-G0 已產出（基於真實計畫書 115WFD0310041）
+- **狀態**: Pre-G0 已產出（基於真實國科會計畫書格式）
 - **驗收**:
   - CM01~CM12 表格格式齊全
   - 支援一般型 / 優秀年輕學者 / 產學合作三種計畫類型
@@ -119,7 +119,7 @@ E2E 測試題材：**金融科技**（G0 決議）
 ### 4.1 結構驗收
 - [ ] `agent-roster.md` 含 `academic-research` 部門 7 位 Agent
 - [ ] `.claude/commands/` 新增 13 個 academic Skills（含 `nstc-grant.md`）
-- [ ] `.knowledge/academic/` 含 4 份 SOP + `agent-prompts.md` + `venue-list.md`
+- [ ] `.knowledge/academic/` 含 4 份 SOP + `agent-prompts.md` + `venue-list.template.md`（個人版放專案內）
 - [ ] `.outputs/` 目錄建立並加入 `.gitignore`
 
 ### 4.2 功能驗收（期刊 — 金融科技主題）

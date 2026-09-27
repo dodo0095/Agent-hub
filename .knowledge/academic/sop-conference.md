@@ -56,11 +56,11 @@ flowchart TD
 
 | 研究主軸 | 首選研討會 | 備選 |
 |---------|-----------|------|
-| **金融科技** | ACM ICAIF / IEEE CIFEr / ICDM / CIKM | ICCMB / IOP Conf |
-| **教育科技** | ICAIE / ICIET / AIED | SITE / CSCL |
+| **金融科技** | ACM ICAIF / IEEE CIFEr / ICDM / CIKM | 依專案內 venue-list.md 投稿紀錄 |
+| **教育科技** | AIED / ICCE / SIGCSE / LAK | SITE / CSCL |
 | **AI 跨領域方法** | ECML-PKDD / IJCAI | ICDM（應用組） |
 
-> 優先參考 `scholar-profile.md`「發表紀錄」與 `venue-list.md`「已投過的 venue」— 主持人有歷史的會議錄取率較高。
+> 優先參考專案內 `scholar-profile.md`「發表紀錄」與 `venue-list.md`「已投過的 venue」— 主持人有歷史的會議錄取率較高。
 
 ### 3.2 Paper Type 決策
 
@@ -92,7 +92,7 @@ flowchart TD
 | 投稿系統 EasyChair/CMT 帳號問題 | submission-manager 提前 48 小時註冊，不得拖到最後一天 |
 | 錄取為 Poster 但預期是 Oral | 接受降級；research-visualizer 依海報規格重製（poster ≠ slides 壓縮） |
 | 全 Reject | 1. 轉投同主軸備選研討會 → 2. 若下一場 deadline 已過，改投期刊 Short Communication |
-| 論文與既有主持人發表（如 ICAIE 2025 ×2）題材重疊 | 必須明確區分「延伸點」與「新貢獻」，在 Intro 加入區隔段落 |
+| 論文與主持人既有發表（見 scholar-profile.md）題材重疊 | 必須明確區分「延伸點」與「新貢獻」，在 Intro 加入區隔段落 |
 
 ---
 
@@ -101,18 +101,18 @@ flowchart TD
 ### 5.1 教育軸範例（T10 對應）
 
 ```yaml
-場景: "ICAIE 2026 — ChatGPT 在資訊教育的延伸研究"
+場景: "AIED 2026 — ChatGPT 在資訊教育的延伸研究"
 流程實例:
   立案:
     Agent: research-director
-    延伸基礎: 主持人 ICAIE 2025 ×2 + ICIET 2025
+    延伸基礎: 主持人既有教育類發表（見專案內 scholar-profile.md）
     新題目: "ChatGPT 輔助學習對不同先備知識學生的分眾效應"
   文獻:
-    必引（自引）: #1, #2, #3（ICAIE/ICIET 三篇）
+    必引（自引）: 依 scholar-profile.md §5.1（教育類）
     外部: Kasneci 2023, Long & Magerko 2020
   Paper Type: Short Paper（6 頁）— 以初步實證為主
-  實驗: 東吳資科系學生 120 人，分高/中/低先備組
-  預期: 顯示分眾交互效應 → 錄取後升級為 ICAIE 2026 Oral
+  實驗: 合作系所學生 120 人，分高/中/低先備組
+  預期: 顯示分眾交互效應 → 爭取 Oral
 ```
 
 ### 5.2 金融軸範例
@@ -125,8 +125,8 @@ flowchart TD
     理由: "ICAIF 是金融 AI 頂級研討會，T4 壓測證實題材可行"
   Paper Type: Full Paper（10 頁）
   關鍵圖: Cross-Attention 融合架構圖（research-visualizer 使用 schematics Skill）
-  內審關注: 自引 #5 IJDMMM 的連貫性必須明確
-  Fallback: 若 ICAIF reject → 轉投 IEEE CIFEr 或 ICCMB
+  內審關注: 與主持人前期金融類成果（scholar-profile.md）的連貫性必須明確
+  Fallback: 若 ICAIF reject → 轉投 IEEE CIFEr 或 venue-list.md 中的熟悉 venue
 ```
 
 ### 5.3 AI 跨領域軸範例（T11 對應）
@@ -147,8 +147,8 @@ flowchart TD
 ## 6. 與其他 SOP 的關聯
 
 - 期刊流程 → `sop-journal.md`（研討會可做為期刊前哨）
-- Venue 決策 → `venue-list.md`
-- 主持人發表紀錄 → `scholar-profile.md`
+- Venue 決策 → 專案內 `venue-list.md`
+- 主持人發表紀錄 → 專案內 `scholar-profile.md`（不存在時請使用者從 Hub 範本建立）
 
 ---
 

@@ -28,3 +28,7 @@ docs/*
 
 # 大型 binary 執行檔（超過 GitHub 50MB 建議上限）
 claude-mem-main/plugin/scripts/claude-mem
+
+# 個人學術資料（放在各專案自己的 .knowledge/academic/，不進 Hub repo）
+.knowledge/academic/scholar-profile.md
+.knowledge/academic/venue-list.md

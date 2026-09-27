@@ -25,11 +25,8 @@ allowed-tools: Read, Write, Edit, Glob, Grep, WebFetch, WebSearch
 1. **主力資料庫**: PubMed / OpenAlex / bioRxiv / arXiv / SSRN（金融）
 2. **關鍵字組合**: 主題 + 方法 + 領域限定
 3. **DOI 驗證通過率必須 ≥ 90%**，否則流程暫停
-4. **老闆研究三大主軸關鍵字**（依 `.knowledge/academic/scholar-profile.md`）:
-   - **金融**: `fintech`, `LLM × finance`, `text mining financial reports`, `stock prediction ML`, `behavioral finance`, `financial literacy`
-   - **教育**: `ChatGPT education`, `CS education`, `learning analytics`, `gamified learning`, `AI-assisted learning`, `student behavior patterns`
-   - **AI 跨領域**: `NLP text-to-image`, `long text processing`, `feature engineering`, `experimental design education`, `AI behavior data`
-5. **必讀檔案**: 執行任何搜尋前先讀 `.knowledge/academic/scholar-profile.md` §5 確認自引規則
+4. **研究主軸關鍵字**: 依**目前專案工作目錄**的 `.knowledge/academic/scholar-profile.md` §2 研究主軸組出關鍵字（不寫死在 Hub）
+5. **必讀檔案**: 執行任何搜尋前先讀專案內 `.knowledge/academic/scholar-profile.md` §5 確認自引規則；若檔案不存在，請使用者從 Hub 範本 `.knowledge/academic/scholar-profile.template.md` 建立，不得自行編造研究者資料
 
 ## 原始 SKILL 位置
 

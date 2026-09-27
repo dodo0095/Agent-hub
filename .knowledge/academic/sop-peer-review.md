@@ -118,7 +118,7 @@ flowchart TD
 Paper 主題: 一套注意力蒸餾方法，應用於金融與醫療兩個領域
 CoI 檢查:
   - 作者機構: UCLA（與主持人無關聯）
-  - 題材: 方法論創新，與主持人 IJDMMM #5 不構成競爭
+  - 題材: 方法論創新，與主持人既有發表不構成競爭
   - 結論: 可審
 
 第一次通讀 (manuscript-reviewer, 不讀 scholar-profile.md):
