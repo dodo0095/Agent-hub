@@ -9,7 +9,7 @@
 
 ## 1. 目標
 
-建立全新 **`academic-research`（學術研究）部門**，整合 `claude-scientific-skills` 核心技能 + **自建 `nstc-grant` Skill**，讓東吳大學資料科學系教授（AI/資訊教育/金融科技領域）能透過 7 位專屬 Agent 完整執行四條學術工作流程：
+建立全新 **`academic-research`（學術研究）部門**，整合 `claude-scientific-skills` 核心技能 + **自建 `nstc-grant` Skill**，讓使用者本人（學者，AI/資訊教育/金融科技領域）能透過 7 位專屬 Agent 完整執行四條學術工作流程：
 
 | 工作流程 | 主要產出 | 目標 Venue |
 |---------|---------|-----------|
@@ -411,7 +411,7 @@ research-director：最終審核 → 交付老闆（人工填入 iRePS）
 
 | 文件 | 路徑 | 狀態 |
 |------|------|------|
-| 國科會專用 Skill | `.claude/commands/nstc-grant.md` | ✅ 已完成（基於真實計畫書 115WFD0310041）|
+| 國科會專用 Skill | `.claude/commands/nstc-grant.md` | ✅ 已完成（基於真實國科會計畫書結構；研究者個人資料見專案內 scholar-profile.md）|
 | 7 位 Agent System Prompts | `.knowledge/academic/agent-prompts.md` | ✅ 已完成 |
 | 目標 Venue 清單 | `.knowledge/academic/venue-list.md` | ✅ 已完成（14個期刊 + 20個研討會）|
 | research-grants Skill | `.claude/commands/grant-writing.md` | 🔲 待複製（Sprint Day 2）|
@@ -420,7 +420,7 @@ research-director：最終審核 → 交付老闆（人工填入 iRePS）
 ### 國科會 Skill 的真實依據
 
 本 `nstc-grant.md` Skill 基於以下真實資料建立：
-- **來源計畫書**：115WFD0310041（東吳大學資料科學系，邱嘉豪助理教授）
+- **來源計畫書**：使用者本人的真實國科會計畫書（樣本與研究者個人資料存放於使用者專案 `.knowledge/academic/`，不入 Hub）
 - **計畫類型**：新進人員研究計畫，個別型，1年期
 - **核心領域**：資訊教育（HSS03-6），AI行為資料平台
 - **完整包含**：CM01~CM12 格式規範、預算結構、IRB要求、審查標準

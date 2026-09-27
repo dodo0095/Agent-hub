@@ -13,7 +13,7 @@
 
 ## 1. 需求摘要
 
-建立全新 `academic-research`（學術研究）部門，整合 13 個核心學術 Skills（含自建 `nstc-grant.md`），讓東吳大學資料科學系教授能透過 7 位專屬 Agent 完成四條學術工作流程：
+建立全新 `academic-research`（學術研究）部門，整合 13 個核心學術 Skills（含自建 `nstc-grant.md`），讓使用者本人（學者）能透過 7 位專屬 Agent 完成四條學術工作流程：
 
 1. **期刊投稿**（IMRAD 英文論文）
 2. **研討會論文**（4-8 頁短篇 + 投影片）
@@ -118,7 +118,7 @@
 
 | 檔案 | 狀態 |
 |------|------|
-| `.claude/commands/nstc-grant.md` | ✅ 已存在（基於真實計畫書 115WFD0310041） |
+| `.claude/commands/nstc-grant.md` | ✅ 已存在（基於真實國科會計畫書結構；研究者個人資料見專案內 scholar-profile.md） |
 | `.knowledge/academic/agent-prompts.md` | ✅ 已存在（7 位 Agent System Prompt 草稿） |
 | `.knowledge/academic/venue-list.md` | ✅ 已存在（14 期刊 + 20 研討會，需補金融類） |
 
