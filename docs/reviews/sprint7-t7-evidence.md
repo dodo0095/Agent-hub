@@ -101,7 +101,9 @@ Session 1（= run1）`session_id` 取自 `system.init`：`bc80a0bf-4cfd-4486-8fd
 
 **判定：✅**（--plugin-dir 在 resume 時必須由 Hub 補上，硬證據確認；同時發現一個值得追蹤的旁支問題，已如實標註未驗證）。
 
-### 5. 錯誤呈現 — ⚠️（靜態追蹤完成；確認錯誤在 UI 層被吞掉，非顯示）
+### 5. 錯誤呈現 — ✅（原判 ⚠️，已修正）
+
+> **更新（2026-09-28）**：本項原判 ⚠️——錯誤在 `SessionLauncher.vue` 被吞成 `console.error`。已於 commit 0a55011、f130d0f 修正：新增 `src/utils/spawn-error.ts`（`notifySpawnError`），SessionLauncher、SessionsView 的 Resume、HarnessView、KnowledgeView 失敗時以 toast 顯示，`ARS_*` 錯誤附 i18n 標題與修法；由 G2 第三、四輪 Review 驗證（`docs/reviews/sprint7-g2-review.md`）。仍有限制：MessageBroker 自動啟動失敗只記 log（backlog S7-MN1）；GUI 實際畫面未截圖。以下為原始追蹤紀錄。
 
 **靜態追蹤（`ARS_*` Error 從 `buildClaudeArgs` throw 開始）**：
 

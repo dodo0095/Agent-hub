@@ -45,6 +45,7 @@
 | mock DB 查詢 | 用 SQL-aware `mockImplementation`，不用 `mockReturnValueOnce` 佇列（會把實作私有呼叫順序寫死進測試） | PM-012 |
 | 測 exposed method | 不 `vi.spyOn` exposed proxy（Vue 3.5 攔不到 template ref 呼叫），改斷言可觀察 DOM 行為 | PM-012 |
 | Stop hook 報 lint/typecheck 失敗 | 先確認是否在無 node_modules 的 worktree 執行（`npm`/`tsc` not found ≠ 檢查紅）；到有 deps 的 clone 重跑再判定 | PM-014 |
+| CLI 參數是否跨 `--resume` 保留 | 不保留：`--plugin-dir`、`--mcp-config` 在 resume 時都要重新傳；用 `system.init` 或 `--debug-file` 實證 | PM-016 |
 | 第三方 Claude plugin 從 zip 安裝（Windows） | git symlink 會變純文字 stub；用 `--debug-file` 確認「Loaded N skills」不是 0，stub 換成實體資料夾 | PM-015 |
 <!-- QUICKREF:END -->
 
@@ -349,6 +350,19 @@
 | 原因 | ARS repo 的 `skills/{academic-paper,academic-paper-reviewer,academic-pipeline,deep-research}` 是 git symlink（指向上層同名資料夾）。zip 下載到 Windows 後 symlink 退化成 16–26 bytes 純文字檔（內容如 `../academic-pipeline`），Claude Code 在 `skills/*/SKILL.md` 找不到任何 skill。只看「plugin 有載入」、commands 列得出來，會誤以為安裝成功。 |
 | 解法 | 備份 4 個 stub 到 session scratchpad，換成對應上層資料夾的實體複本（`cp -R`）。重測：debug log「Loaded 4 skills」，模型可見 `academic-research-skills:academic-pipeline` 等 4 個 skill。 |
 | 預防 | (1) 驗證 plugin 載入要看 debug log 的 skills／commands／agents 三個數字，不能只看有沒有報錯。(2) ARS 每次更新（重新下載 zip）都會再出現，Hub 啟動 publication-operator 前必須檢查 `<ARS>/skills/*/SKILL.md` 全部存在，否則明確報錯並提示修法（併入「ARS 整合」dev-plan）。 |
-| 狀態 | open |
+| 狀態 | resolved（2026-09-28，Sprint 7：`electron/utils/ars-validator.ts` 於啟動前檢查，缺檔拋 `ARS_INSTALL_INCOMPLETE` 並由 GUI toast 顯示修法；README 安裝說明已加 zip 注意事項） |
 | 到期日 | 2026-10-11 |
 | Backlog | `.tasks/backlog/PM-015-ars-skills-symlink-check.md`（`.tasks/` 已 gitignore，檔案在主 clone） |
+
+### 2026-09-28 — PM-016 `claude --resume` 不會帶回 `--mcp-config`，與程式碼註解相反
+
+| 項目 | 內容 |
+|------|------|
+| 分類 | runtime |
+| 問題 | `electron/services/session-spawn-helpers.ts` 的 MCP 注入區塊註解寫「resume sessions inherit the original session's MCP config automatically」，所以兩條 resume 路徑都不傳 `--mcp-config`。Sprint 7 T7 以 Claude Code 2.1.283 實測：`claude --resume <id>` 的 `system.init.mcp_servers` 沒有 send-message server，resume 回來的 session 無法用 SendMessage／ListInbox。 |
+| 原因 | 註解的前提（CLI 會繼承原 session 的 MCP 設定）沒有經過實測；`--mcp-config` 與 `--plugin-dir` 一樣只對單次 CLI 呼叫生效。 |
+| 解法 | 尚未修（CLI 層實測，未在 Hub GUI 內重現）。Sprint 7 已對 `--plugin-dir` 在 resume 時重新注入；`--mcp-config` 待 backlog 處理。 |
+| 預防 | 關於「CLI 參數是否跨 resume 保留」的假設一律用 `--debug-file` 或 `--output-format json` 的 `system.init` 實證（同 PM-010 原則），不寫未驗證的註解。 |
+| 狀態 | open |
+| 到期日 | 2026-10-12 |
+| Backlog | `.tasks/backlog/S7-resume-mcp-config-lost.md`（`.tasks/` 已 gitignore，檔案在主 clone） |

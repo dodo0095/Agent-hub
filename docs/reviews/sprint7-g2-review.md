@@ -402,3 +402,124 @@ tsc -p tsconfig.node.json / tsconfig.web.json → 無錯誤   EXIT 0
 - `resumeSessionId` 那條路徑是否有 `src/` 以外的 UI 入口：只 grep 了 `src/`。
 - MN-11：`--resume` 不帶回 MCP config 是否是 CLI 的預期行為，沒有核實。
 - `preflight.cjs`、`npm run build`：本輪沒有執行。
+
+---
+
+## 第四輪 Review（commit f130d0f ＋ T8 未 commit 文件）
+
+> 審查者：同一位獨立 reviewer（未參與修正）
+> 日期：2026-09-28
+> G2 範圍：`git diff 0a55011..f130d0f`（src/**、tests/**，另含本報告第三輪節）
+> G4 範圍：工作區中尚未 commit 的 `README.md`（T8）與 `.knowledge/postmortem-log.md`（PM-016）
+> **G2 最終判定：✅ 通過**（🔴 0 / 🟠 0）
+> **G4 文件一致性判定：❌ 未通過**（🔴 0 / 🟠 1 / 🟡 3）
+
+### R4-1. MJ-3／MN-10 結果
+
+| # | 結果 | 證據 |
+|---|:--:|------|
+| MJ-3 | ✅ 已修 | 新增共用模組 `src/utils/spawn-error.ts`：`buildSpawnErrorToast` 負責組出標題和內文，`notifySpawnError` 負責推送 toast。四個入口都已接上：`SessionLauncher.vue:235`、`SessionsView.vue:229`（可恢復對話的 Resume）、`HarnessView.vue:98`、`KnowledgeView.vue:166`。三個 view 的 `t` 和 `uiStore` 都已在 script setup 中宣告（`SessionsView.vue:30,33`、`HarnessView.vue:10,13`、`KnowledgeView.vue:14,19`），typecheck 也通過。`resumeByConversationId` 和 `spawn` 的 store 函式只有 try/finally，錯誤會往上拋到 view 的 catch（`src/stores/sessions.ts:170-205, 208-249`），不會在 store 裡被吞掉 |
+| MN-10 | ✅ 已修 | `spawn-error.ts:28-31`：`ARS_PATH_NOT_SET` 和 `ARS_REQUIRES_INTERACTIVE` 只顯示 i18n 文字，不再附上後端的中文細節。`ARS_INSTALL_INCOMPLETE` 保留後端原文，因為缺檔清單是動態內容。新增的 1 組 i18n key 在 zh-TW 和 en 兩邊對齊 |
+
+**對非 ARS 錯誤的影響**：HarnessView 和 KnowledgeView 以前失敗時只寫 console，現在會跳出通用的「啟動失敗」toast。這是改善，不是回歸。錯誤處理只在 catch 區塊內，成功路徑沒有改變。
+
+### R4-2. SessionsView 不做元件測試，改用單元測試替代：**可以接受**
+
+理由：
+1. SessionsView 本輪的改動只有 catch 區塊裡的一行 `notifySpawnError(err, t, uiStore)`（`:229`），沒有其他邏輯。
+2. 可能出錯的部分是訊息怎麼組、標題怎麼選、IPC 前綴怎麼剝，這些都集中在 `spawn-error.ts`，由 `tests/unit/spawn-error.test.ts` 用 7 個精確斷言覆蓋。其中包括 MJ-3 的具體情境：`ARS_INSTALL_INCOMPLETE` 經由 `notifySpawnError` 推送出去，並斷言 `addToast` 收到的三個參數。
+3. 「catch 區塊確實呼叫了共用函式」這件事，SessionLauncher 的元件測試已經在真實點擊下驗證過，用的是同一個函式、同一種接法。
+4. SessionsView 依賴 VirtualList、router、xterm，要掛載它需要大量 stub，測試的維護成本和假陽性風險都高於它能提供的保護。
+
+剩下的風險是「SessionsView 的這一行被誤刪」，屬於低風險。建議在 T7 補一次 GUI 手動驗證：把 ARS 路徑改成錯的，按 Resume，確認有跳出 toast。
+
+小瑕疵（不列入問題）：`spawn-error.test.ts` 的 notifySpawnError 測試案例用了不存在的 IPC channel 名稱 `'sessions:resumeByConversationId'`（實際是 `sessions:spawn`）。因為前綴本來就會被剝掉，不影響斷言。
+
+### R4-3. 新測試品質
+
+- `tests/unit/spawn-error.test.ts`：共 7 案。`buildSpawnErrorToast` 的 5 案都用 `toEqual` 斷言完整的標題和內文，並用 `not.toContain` 確認沒有夾帶中文；另有 fallback 一案。`notifySpawnError` 的 2 案用 `toHaveBeenCalledWith` 斷言三個參數。✅
+- `SessionLauncher.test.ts`：ARS_PATH_NOT_SET 一案改成精確比對 i18n 字串，並斷言內文不含後端的中文；新增 ARS_INSTALL_INCOMPLETE 一案，斷言保留後端原文。✅
+- setup.ts 本輪沒有改動。
+
+### R4-4. G4 文件一致性（README.md T8 修改 vs 程式碼與規範）
+
+| README 陳述 | 對照 | 結果 |
+|------------|------|:--:|
+| 出版部、分流表、一次性準備第 3 步由 🚧 改成 ✅ | T3–T6 已實作，G2 本輪通過 | ✅ |
+| 「到 Hub『設定 → 學術出版部』填入 ARS 根目錄（含 `.claude-plugin` 資料夾的那層）」 | `SettingsView.vue` 的「學術出版部」卡片和 key `ars.plugin-dir`；驗證器要求 `.claude-plugin/plugin.json`（`ars-validator.ts`） | ✅ |
+| Windows zip 解壓後 4 項 stub 需換成資料夾 | 驗證器列出的 4 個 SKILL.md 和 README 列的 4 項名稱一致；錯誤訊息的修法字句也一致 | ✅ |
+| 「不要用 `claude plugin install` 全域安裝；Hub 在啟動 Publication Operator 時自動載入」 | 技術決策書 D2-A；`--plugin-dir` 只注入出版部（含 resume） | ✅ |
+| 「路徑沒填、檔案缺漏或非互動模式啟動，會直接顯示錯誤並說明修法，不會啟動一個沒有 ARS 的操作員」 | 後半句成立：一定會擋下。前半句「會直接顯示錯誤」只對 GUI 的 4 個入口成立 | ❌ 見 MJ-4 |
+| 授權段落 | 沒有改動，和 SettingsView 的授權提示一致 | ✅ |
+
+#### 🟠 MJ-4（G4）：README 宣稱「會直接顯示錯誤」，但規範描述的主要派工流程不會顯示
+
+- **位置**：`README.md:276`；對照 `.knowledge/specs/feature-spec.md:180`（「總監指派 publication-operator，Hub 以互動模式啟動並注入 ARS」）、`electron/services/message-broker.ts:166-179, 268-285`，以及第一輪的 MN-1（已列 backlog `S7-MN1-ars-autospawn-error-visibility.md`）。
+- **問題**：總監透過訊息指派操作員、而操作員還沒有 active session 時，會走 MessageBroker 的 auto-spawn。這時 `ARS_*` 錯誤只會記一行 `logger.warn`，老闆和總監都看不到。第一輪我接受 MN-1 列 backlog，前提是它是「已知的程式碼缺口」；但 T8 新寫的 README 文字把這個缺口描述成不存在。依致命規則 1「文件就是法律」，文件承諾了程式碼沒有做到的行為，這屬於 G4 的對規範不一致。總監究竟是用 SendMessage 還是由老闆在 GUI 手動啟動，我沒有實測（見未驗證清單）；但 feature-spec §6.2 的寫法和 MessageBroker 的 auto-spawn 設計都指向前者可能發生。
+- **修改建議**（二擇一）：
+  1. **文件面（最小改動）**：把 README:276 改成「從 Hub 介面啟動或接續 Publication Operator 時，路徑沒填、檔案缺漏會直接顯示錯誤並說明修法；由總監以訊息自動派工時，目前錯誤只記在 log（已列 backlog），若操作員遲遲沒有回應，請到設定頁確認 ARS 路徑」。
+  2. **程式面**：把 MN-1 的 backlog 提前到本 Sprint 修掉，README 維持現在的寫法。
+
+#### 🟡 MN-12（G4）：T8 的驗收項目尚未完成
+
+- `proposal/sprint7-dev-plan.md` 的 T8 驗收要求對 PM-015 執行 `/pitfall-resolve` 並把 backlog 標為 done。目前 `.knowledge/postmortem-log.md:343-354` 的 PM-015 狀態仍是 `open`；PM-015 的預防措施（啟動前做完整性檢查）已由 `ars-validator.ts` 實作，可以結案了。
+- dev-plan §9 的五個文件勾選框都還沒勾；§10 的 T3–T8、Review 紀錄、G2 Gate 列都還空白。
+- **建議**：T8 收尾時一併完成。G2 Gate 列可以引用本報告。
+
+#### 🟡 MN-13（G4）：PM-016 沒有加進快速參考表
+
+- **位置**：`.knowledge/postmortem-log.md`，QUICKREF 區塊（約 `:40-49`）。PM-015 有加，PM-016 沒有。
+- **建議**：補一行：「關於 CLI 參數是否跨 resume 保留 → 用 `system.init` 實證，`--mcp-config`／`--plugin-dir` 都不會自動繼承 → PM-016」。PM-016 本身的內容和 T7 證據（`sprint7-t7-evidence.md:100`）一致，也有 backlog，合格。
+
+#### 🟡 MN-14（G4）：T7 證據第 5 項的判定已經過時
+
+- **位置**：`docs/reviews/sprint7-t7-evidence.md:104-139`，判定寫的是 ⚠️「錯誤在 UI 被吞掉」。
+- **問題**：0a55011 和 f130d0f 已經修好這一點，但證據檔沒有補記。G3 的審查者會看到互相矛盾的狀態。
+- **建議**：在第 5 項末尾追加「修正後狀態：已由 0a55011／f130d0f 修正，見 G2 review 第三、四輪」。最好再補一次 GUI 手動驗證的截圖。
+
+另外，README:273 的範例路徑 `academic-research-skills-main/` 是 zip 下載的資料夾命名，和同一句「建議 git clone」不太搭，屬於措辭，不列入問題。
+
+### R4-5. 驗證指令輸出
+
+```
+$ git log --oneline 0a55011..HEAD   → f130d0f fix(ui): 所有 session 啟動／接續入口失敗時都顯示錯誤
+$ git status --short                → M .knowledge/postmortem-log.md, M README.md（T8，未 commit）；本報告
+$ npx vitest run
+ Test Files  32 passed (32)
+      Tests  437 passed (437)       （第三輪 429 → +8）
+EXIT 0
+$ npm run lint
+✖ 128 problems (0 errors, 128 warnings)   EXIT 0（總數和前三輪相同）
+$ npm run typecheck
+tsc -p tsconfig.node.json / tsconfig.web.json → 無錯誤   EXIT 0
+$ grep -rn "interactive: false" src electron   → 除了 spawn helper 之外沒有其他結果（GUI 沒有非互動的啟動入口）
+```
+
+### R4-6. 判定
+
+**G2（程式碼 ＋ 規範）**
+
+| 等級 | 數量 | 說明 |
+|------|:--:|------|
+| 🔴 Blocker | 0 | — |
+| 🟠 Major | 0 | MJ-1、MJ-2、MJ-3 都已修正，並有測試 |
+| 🟡 Minor | 未結 1 | MN-1（backlog，已接受）。MN-2～MN-10 已修；MN-11 已記 PM-016 並建 backlog |
+
+**G2 最終判定：✅ 通過**，可以提交 G2 Gate。
+
+**G4（文件 vs 程式碼）**
+
+| 等級 | 數量 | 項目 |
+|------|:--:|------|
+| 🔴 Blocker | 0 | — |
+| 🟠 Major | 1 | MJ-4：README:276 宣稱的錯誤呈現範圍超過程式碼實際能做到的 |
+| 🟡 Minor | 3 | MN-12（T8 驗收項未完成）、MN-13（QUICKREF 缺 PM-016）、MN-14（T7 證據過時） |
+
+**G4 判定：❌ 未通過**。修掉 MJ-4（建議採文件面的一句改寫）並完成 MN-12 後，再送 G4 複審。
+
+### R4-7. 第四輪未驗證項目
+
+- research-director 實際上是用 SendMessage 觸發 auto-spawn 來指派 publication-operator，還是由老闆在 GUI 手動啟動：沒有實測。這影響 MJ-4 的實際發生頻率，但不影響「README 陳述超出程式碼」這個判斷。
+- 四個 GUI 入口的 toast 在真實 Hub 裡的畫面：沒有截圖，也沒有點擊。
+- 主 clone 裡的 backlog 檔 `S7-resume-mcp-config-lost.md`：只用 `ls` 確認檔案存在，沒有開啟確認內容。
+- `preflight.cjs`、`npm run build`：本輪沒有執行。

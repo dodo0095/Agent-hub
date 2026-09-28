@@ -204,11 +204,11 @@ T7 為真實 Hub 啟動驗證（非自動化），證據存 `docs/reviews/sprint
 
 ## 9. 文件更新
 
-- [ ] `.knowledge/specs/*.md`（T1）
-- [ ] `.knowledge/academic/department-structure.md`、`agent-prompts.md`（T1、T2）
-- [ ] `README.md` 學術事業群使用指南（T8）
-- [ ] `.knowledge/postmortem-log.md` PM-015 resolve（T8）
-- [ ] CLAUDE.md：不需修改（學術部門索引已指向 `.knowledge/academic/`）
+- [x] `.knowledge/specs/*.md`（T1）
+- [x] `.knowledge/academic/department-structure.md`、`agent-prompts.md`（T1、T2）
+- [x] `README.md` 學術事業群使用指南（T8）
+- [x] `.knowledge/postmortem-log.md` PM-015 resolve（T8）；另記 PM-016（resume 不帶回 --mcp-config）
+- [x] CLAUDE.md：不需修改（學術部門索引已指向 `.knowledge/academic/`）
 
 ---
 
@@ -222,21 +222,21 @@ T7 為真實 Hub 啟動驗證（非自動化），證據存 `docs/reviews/sprint
 |------|---------|------|------|
 | T1 | 2026-09-28 | ✅ 完成 | 四份規範升 v2.0（commit 7e6487f）；補 ARS 檢查點不算越級匯報的例外條款 |
 | T2 | 2026-09-28 | ✅ 完成 | publication-operator.md 新增；research-director manages 7 位＋出版部管控四點；gray-matter 解析驗證通過（commit 7e6487f） |
-| T3 | | | |
-| T4 | | | |
-| T5 | | | |
-| T6 | | | |
-| T7 | | | |
-| T8 | | | |
+| T3 | 2026-09-28 | ✅ 完成 | agent-loader 三張對照表＋`tests/unit/agent-loader.test.ts`（commit 64ebd01） |
+| T4 | 2026-09-28 | ✅ 完成 | `ars-validator.ts`；G2 MN-3 改為要求「是檔案」（64ebd01、5219afa） |
+| T5 | 2026-09-28 | ✅ 完成 | 一般啟動／兩條 resume 皆注入；G2 修正 MJ-1（direct resume 反查）、MN-8（連續 resume）、路徑正規化（64ebd01、5219afa、0a55011） |
+| T6 | 2026-09-28 | ✅ 完成 | 設定頁 ARS 路徑；T7／G2 追加：所有啟動與接續入口失敗時顯示 toast（0a55011、f130d0f） |
+| T7 | 2026-09-28 | ✅ 完成 | CLI 層五項驗證（fresh-context agent），第 5 項原 ⚠️ 已修；GUI 畫面未截圖（未驗證）。證據 `docs/reviews/sprint7-t7-evidence.md` |
+| T8 | 2026-09-28 | ✅ 完成 | README 🚧→✅＋安裝說明與自動啟動限制；PM-015 resolved；PM-016 記錄 |
 
 ### Review 紀錄
 
 | Review 步驟 | 日期 | 結果 | Review 文件連結 |
 |------------|------|------|---------------|
-| 規範 Review | | | |
-| 實作 Review | | | |
-| 測試 Review | | | |
-| 文件 Review | | | |
+| 規範 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-g2-review.md`（第一輪對規範項） |
+| 實作 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-g2-review.md`（四輪；最終 0 Blocker／0 Major） |
+| 測試 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-t7-evidence.md`；全套 437/437 |
+| 文件 Review | 2026-09-28 | 待複審 | 第四輪 G4 退回 MJ-4、MN-12～14，已修正待複審 |
 
 ### Gate 紀錄
 

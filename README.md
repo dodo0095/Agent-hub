@@ -214,7 +214,7 @@ cost = (10,000×3 + 5,000×15 + 20,000×3.75 + 0×6 + 100,000×0.30) ÷ 1,000,00
 
 ## 學術事業群使用指南
 
-> 狀態標示：✅ 已可用　🚧 規劃中（尚未實作，由「ARS 整合」dev-plan 交付）。
+> 狀態標示：✅ 已可用。學術出版部於 Sprint 7（2026-09-28）上線，規格見 `.knowledge/specs/*.md` 第 6 節。
 > 本節是學術事業群的**運作流程與使用說明**，所有與學術相關的分流、交接、檢查點規則以本節為準。
 
 ### 組織
@@ -225,7 +225,7 @@ cost = (10,000×3 + 5,000×15 + 20,000×3.75 + 0×6 + 100,000×0.30) ÷ 1,000,00
     ├── 學術研究部 ✅ ── 「工具箱」：單點學術工作
     │   └── Literature Scout、Paper Writer、Research Analyst、
     │       Manuscript Reviewer、Research Visualizer、Grant Writer
-    └── 學術出版部 🚧 ── 「生產線」：用 ARS 跑完整論文流程
+    └── 學術出版部 ✅ ── 「生產線」：用 ARS 跑完整論文流程
         └── Publication Operator（ARS 流程操作員）
 
 Project Lead（協作）── 只追排程、成本與阻塞，不碰學術內容
@@ -239,10 +239,10 @@ Project Lead（協作）── 只追排程、成本與阻塞，不碰學術內�
 
 | 需求 | 派給 | 使用的能力 |
 |------|------|-----------|
-| 一篇論文從零寫到可投稿 | 出版部 🚧 | ARS `academic-pipeline`（`/ars-full`） |
-| 系統性文獻回顧（PRISMA） | 出版部 🚧 | ARS `deep-research` systematic-review |
-| 收到審稿意見，要大修／寫回覆信 | 出版部 🚧 | ARS `revision`、`rebuttal-audit` |
-| 投稿前體檢（引用真偽、AI 使用揭露） | 出版部 🚧 | ARS `citation-check`、`disclosure` |
+| 一篇論文從零寫到可投稿 | 出版部 ✅ | ARS `academic-pipeline`（`/ars-full`） |
+| 系統性文獻回顧（PRISMA） | 出版部 ✅ | ARS `deep-research` systematic-review |
+| 收到審稿意見，要大修／寫回覆信 | 出版部 ✅ | ARS `revision`、`rebuttal-audit` |
+| 投稿前體檢（引用真偽、AI 使用揭露） | 出版部 ✅ | ARS `citation-check`、`disclosure` |
 | 國科會計畫申請書 | 研究部 ✅ | Grant Writer（`/nstc-grant`） |
 | 研討會簡報、海報、研究流程圖 | 研究部 ✅ | Research Visualizer |
 | 快速查文獻、單項統計分析 | 研究部 ✅ | Literature Scout／Research Analyst |
@@ -269,7 +269,11 @@ Project Lead（協作）── 只追排程、成本與阻塞，不碰學術內�
 **一次性準備**
 1. ✅ 在你的論文工作資料夾（例如 `ALL PROJECT/academic_paper/`）建立 `.knowledge/academic/scholar-profile.md` 與 `venue-list.md`。範本在本 repo 的 `.knowledge/academic/*.template.md`。**個人資料只放在你的專案裡，不進 Hub repo**（已列入 `.gitignore`）。
 2. ✅ 每篇論文一個資料夾，在 Hub 建立為專案。
-3. 🚧 安裝 ARS，並在 Hub 設定外掛路徑（見下方「ARS 授權」）。
+3. ✅ 安裝 ARS，並在 Hub 設定路徑：
+   - 下載 [Academic Research Skills](https://github.com/Imbad0202/academic-research-skills)（建議 `git clone`），放在固定位置，例如 `ALL PROJECT/academic-research-skills-main/`。**不要**用 `claude plugin install` 全域安裝——ARS 只給出版部用，Hub 會在啟動 Publication Operator 時自動載入。
+   - ⚠️ **Windows 用 zip 下載時**：`skills/` 裡的 4 項（`academic-paper`、`academic-paper-reviewer`、`academic-pipeline`、`deep-research`）會變成幾十 bytes 的小檔案（原本是捷徑），ARS 會載入 0 個 skill。請把這 4 個小檔刪掉，換成上層同名資料夾的複本（PM-015）。
+   - 到 Hub「設定 → 學術出版部」填入 ARS 根目錄（含 `.claude-plugin` 資料夾的那層）。
+   - 啟動 Publication Operator 時 Hub 會先檢查 ARS 是否完整；路徑沒填、檔案缺漏或非互動模式啟動，一律拒絕啟動，不會出現一個沒有 ARS 的操作員。從 GUI 啟動或接續（新增 session、可恢復對話的 Resume）時，畫面會跳出錯誤提示並說明修法。⚠️ 目前限制：若是總監用訊息指派、由 Hub 自動啟動操作員，失敗只記在 log、畫面上不會提示（待修，backlog `S7-MN1`）；總監派工後若操作員沒有動靜，請先到「設定 → 學術出版部」確認 ARS 路徑。
 
 **常見情境**
 
