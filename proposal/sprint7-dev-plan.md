@@ -61,6 +61,8 @@ README「學術事業群使用指南」已公告學術出版部與 Publication O
 | `agents/definitions/academic-publication/publication-operator.md` | Publication Operator 角色定義與 system prompt |
 | `electron/utils/ars-validator.ts` | `validateArsPluginDir(path)`：檢查 plugin.json 與 4 個 SKILL.md |
 | `tests/unit/ars-validator.test.ts` | 驗證器單元測試 |
+| `tests/unit/agent-loader.test.ts` | agent-loader 載入新部門測試 |
+| `tests/components/SettingsView.test.ts` | 設定頁 ARS 路徑欄位元件測試 |
 
 ### 修改
 
@@ -68,7 +70,7 @@ README「學術事業群使用指南」已公告學術出版部與 Publication O
 |------|---------|
 | `electron/services/agent-loader.ts` | 三張對照表補 `academic-publication` / `publication-operator` |
 | `electron/services/session-spawn-helpers.ts` | 出版部 session 注入 `--plugin-dir`（含 resume 路徑）與三種錯誤 |
-| `tests/unit/session-spawn-helpers.test.ts` | 新增注入與錯誤案例 |
+| `tests/services/session-spawn-helpers.test.ts` | 新增注入與錯誤案例（沿用既有測試檔） |
 | `src/views/SettingsView.vue` + locale 檔 | 新增「ARS 路徑」欄位（zh-TW / en） |
 | `agents/definitions/academic-research/research-director.md` | `manages` 加 `publication-operator`；prompt 補出版部管控四點 |
 | `.knowledge/academic/department-structure.md` | 升 v2.0：加出版部、跨部門管理約束 |
@@ -175,7 +177,7 @@ T1 ─┬─→ T2 ─→ T3 ─┐
 | 測試檔案 | 測試案例 |
 |---------|---------|
 | `tests/unit/ars-validator.test.ts` | 完整目錄 → ok；`skills/academic-pipeline` 為 stub 檔 → missing 含該路徑；路徑不存在 → ok=false |
-| `tests/unit/session-spawn-helpers.test.ts` | 出版部 agent → 含 `--plugin-dir <path>`；工程部 agent → 不含；resume 出版部 session → 含；未設定路徑 → `ARS_PATH_NOT_SET`；ARS 不完整 → `ARS_INSTALL_INCOMPLETE`；非互動 → `ARS_REQUIRES_INTERACTIVE` |
+| `tests/services/session-spawn-helpers.test.ts` | 出版部 agent → 含 `--plugin-dir <path>`；工程部 agent → 不含；resume 出版部 session → 含；未設定路徑 → `ARS_PATH_NOT_SET`；ARS 不完整 → `ARS_INSTALL_INCOMPLETE`；非互動 → `ARS_REQUIRES_INTERACTIVE` |
 | agent-loader 測試 | 載入 `academic-publication` 部門，名稱「學術出版部」 |
 
 > mock DB 查詢用 SQL-aware `mockImplementation`（PM-012），不用 `mockReturnValueOnce` 佇列。

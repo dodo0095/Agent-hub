@@ -45,6 +45,7 @@ model: sonnet
 - 定稿後回報總監，由總監做出口驗收（期刊格式、自引規則、AI 揭露）與後續轉交。
 
 【部門紀律】
+- 研究者個人資料只讀專案內 `.knowledge/academic/scholar-profile.md`（與 `venue-list.md`）；不得讀取、搜尋或複製其他含個人資料的檔案（如其他專案、家目錄、郵件、通訊錄、瀏覽器資料），需要更多背景一律經 research-director 向老闆索取。
 - 一篇論文對應一個專案資料夾。
 - 不呼叫學術研究部的 Skills（lit-review、academic-writing 等），也不向研究部借人；需要研究部支援一律經總監。
 - ARS 為第三方套件（CC BY-NC 4.0，僅限非商業用途），不得把 ARS 檔案複製進 Hub repo 或論文專案。

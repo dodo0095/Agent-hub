@@ -3,6 +3,8 @@
 const mockExistsSync = vi.fn(() => false);
 const mockReadFileSync = vi.fn(() => '');
 const mockWriteFileSync = vi.fn();
+// Used by electron/utils/ars-validator.ts (statSync(path, { throwIfNoEntry: false })).
+const mockStatSync = vi.fn((_p: unknown, _opts?: unknown): { isFile(): boolean } | undefined => undefined);
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
@@ -12,6 +14,7 @@ vi.mock('fs', async (importOriginal) => {
     readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
     writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
     mkdirSync: vi.fn(),
+    statSync: (...args: [unknown, unknown?]) => mockStatSync(...args),
   };
 });
 
@@ -170,18 +173,26 @@ describe('ensureWorkspaceTrust', () => {
 describe('buildClaudeArgs — ARS plugin-dir injection', () => {
   const ARS_DIR = join('C:', 'fake-ars');
 
-  /** Path-aware existsSync: only paths under ARS_DIR "exist", and only when `complete`. */
+  /**
+   * Path-aware statSync: ars-validator.ts calls
+   * `statSync(fullPath, { throwIfNoEntry: false })` — only paths under
+   * ARS_DIR "exist" (as files), and only when `complete`.
+   */
   function setupArsFs(complete: boolean) {
-    mockExistsSync.mockImplementation((p: unknown) => {
-      if (typeof p !== 'string') return false;
-      return complete && p.startsWith(ARS_DIR);
+    mockStatSync.mockImplementation((p: unknown) => {
+      if (typeof p !== 'string') return undefined;
+      if (complete && p.startsWith(ARS_DIR)) {
+        return { isFile: () => true };
+      }
+      return undefined;
     });
   }
 
   /** SQL-aware DB mock (PM-012): branches on query text + bound params. */
   function configureDb(opts: {
     arsPluginDir?: string | null;
-    resumeSession?: { id: string; claude_conversation_id: string; agent_id: string };
+    resumeSession?: { id: string; claude_conversation_id: string; agent_id: string | null };
+    directResumeConv?: { convId: string; agentId: string | null };
   }) {
     mockDbPrepare.mockImplementation((sql: string, params?: unknown[]) => {
       if (/FROM user_preferences WHERE key = \?/i.test(sql)) {
@@ -191,13 +202,20 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
         }
         return [];
       }
-      if (/FROM claude_sessions WHERE id = \?/i.test(sql)) {
+      if (/FROM claude_sessions\s+WHERE id = \?/i.test(sql)) {
         const id = params?.[0];
         if (opts.resumeSession && opts.resumeSession.id === id) {
           return [{
             claude_conversation_id: opts.resumeSession.claude_conversation_id,
             agent_id: opts.resumeSession.agent_id,
           }];
+        }
+        return [];
+      }
+      if (/FROM claude_sessions\s+WHERE claude_conversation_id = \?/i.test(sql)) {
+        const convId = params?.[0];
+        if (opts.directResumeConv && opts.directResumeConv.convId === convId && opts.directResumeConv.agentId) {
+          return [{ agent_id: opts.directResumeConv.agentId }];
         }
         return [];
       }
@@ -210,6 +228,8 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
     mockExistsSync.mockReturnValue(false);
     mockReadFileSync.mockReset();
     mockWriteFileSync.mockReset();
+    mockStatSync.mockReset();
+    mockStatSync.mockReturnValue(undefined);
     mockDbPrepare.mockReset();
     mockDbPrepare.mockImplementation(() => []);
     mockGetAgent.mockReset();
@@ -287,6 +307,106 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
     expect(args).toEqual(['--resume', 'conv-999']);
   });
 
+  it('does not add --plugin-dir on resume when the original session has agent_id null (MN-7.4)', () => {
+    configureDb({
+      resumeSession: { id: 'sess-orig-null', claude_conversation_id: 'conv-null-agent', agent_id: null },
+    });
+
+    const params: SpawnParams = {
+      agentId: 'whatever',
+      task: '',
+      resumeSessionId: 'sess-orig-null',
+      projectId: null,
+    };
+    const { args } = buildClaudeArgs(params, 'sess-resume-null-agent', 'sonnet', 10, true, true, false);
+
+    expect(args).toEqual(['--resume', 'conv-null-agent']);
+  });
+
+  // ─── MJ-1 (G2 review): direct resume must not silently drop ARS ───────────
+  // The sole caller (src/stores/sessions.ts resumeByConversationId) always
+  // passes agentId: '' — buildClaudeArgs must fall back to looking up the
+  // original agent via claude_conversation_id instead of trusting params.agentId.
+
+  it('MJ-1: direct resume with agentId "" injects --plugin-dir when the DB shows the original agent was academic-publication', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    configureDb({
+      arsPluginDir: ARS_DIR,
+      directResumeConv: { convId: 'conv-direct-pub', agentId: 'publication-operator' },
+    });
+    setupArsFs(true);
+
+    const params: SpawnParams = {
+      agentId: '', // exactly what src/stores/sessions.ts resumeByConversationId passes
+      task: '',
+      resumeConversationId: 'conv-direct-pub',
+      projectPath: 'C:/some/project',
+    };
+    const { args } = buildClaudeArgs(params, 'sess-direct-pub', 'sonnet', 10, true, false, true);
+
+    expect(args).toEqual(['--resume', 'conv-direct-pub', '--plugin-dir', ARS_DIR]);
+  });
+
+  it('MJ-1: direct resume with agentId "" does not inject --plugin-dir when the DB shows the original agent was engineering', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'backend-architect' ? { department: 'engineering' } : undefined,
+    );
+    configureDb({
+      directResumeConv: { convId: 'conv-direct-eng', agentId: 'backend-architect' },
+    });
+
+    const params: SpawnParams = {
+      agentId: '',
+      task: '',
+      resumeConversationId: 'conv-direct-eng',
+      projectPath: 'C:/some/project',
+    };
+    const { args } = buildClaudeArgs(params, 'sess-direct-eng', 'sonnet', 10, true, false, true);
+
+    expect(args).toEqual(['--resume', 'conv-direct-eng']);
+  });
+
+  it('MJ-1: direct resume with agentId "" and no matching DB row does not inject --plugin-dir and does not throw', () => {
+    // No claude_sessions row for this conversation at all (e.g. a conversation
+    // that was never spawned through AgentHub).
+    configureDb({});
+
+    const params: SpawnParams = {
+      agentId: '',
+      task: '',
+      resumeConversationId: 'conv-direct-unknown',
+      projectPath: 'C:/some/project',
+    };
+    let result: ReturnType<typeof buildClaudeArgs> | undefined;
+    expect(() => {
+      result = buildClaudeArgs(params, 'sess-direct-unknown', 'sonnet', 10, true, false, true);
+    }).not.toThrow();
+
+    expect(result!.args).toEqual(['--resume', 'conv-direct-unknown']);
+  });
+
+  it('MJ-1: direct resume prefers a non-empty params.agentId over the DB lookup', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    configureDb({ arsPluginDir: ARS_DIR });
+    setupArsFs(true);
+    // No directResumeConv configured — if the code fell through to a DB
+    // lookup it would find nothing and skip --plugin-dir. Passing it here
+    // proves params.agentId (when non-empty) is used directly, no DB hit.
+    const params: SpawnParams = {
+      agentId: 'publication-operator',
+      task: '',
+      resumeConversationId: 'conv-direct-explicit-agent',
+      projectPath: 'C:/some/project',
+    };
+    const { args } = buildClaudeArgs(params, 'sess-direct-explicit', 'sonnet', 10, true, false, true);
+
+    expect(args).toEqual(['--resume', 'conv-direct-explicit-agent', '--plugin-dir', ARS_DIR]);
+  });
+
   it('throws ARS_PATH_NOT_SET when ars.plugin-dir is unset', () => {
     mockGetAgent.mockImplementation((id: string) =>
       id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
@@ -315,7 +435,7 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('throws ARS_INSTALL_INCOMPLETE when the ARS directory is missing required files', () => {
+  it('throws ARS_INSTALL_INCOMPLETE when the ARS directory is missing required files (MN-7.3: message content)', () => {
     mockGetAgent.mockImplementation((id: string) =>
       id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
     );
@@ -323,8 +443,21 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
     setupArsFs(false); // nothing under ARS_DIR "exists"
 
     const params: SpawnParams = { agentId: 'publication-operator', task: 'x', projectId: null };
-    expect(() => buildClaudeArgs(params, 'sess-err-incomplete', 'sonnet', 10, true, false, false))
-      .toThrow(/^ARS_INSTALL_INCOMPLETE:/);
+    let thrown: Error | undefined;
+    try {
+      buildClaudeArgs(params, 'sess-err-incomplete', 'sonnet', 10, true, false, false);
+    } catch (err) {
+      thrown = err as Error;
+    }
+
+    expect(thrown?.message).toMatch(/^ARS_INSTALL_INCOMPLETE:/);
+    // §6.4「訊息須包含」：缺少的檔案清單
+    expect(thrown?.message).toContain('.claude-plugin/plugin.json');
+    expect(thrown?.message).toContain('skills/academic-paper/SKILL.md');
+    expect(thrown?.message).toContain('skills/deep-research/SKILL.md');
+    // §6.4「訊息須包含」：zip 下載修法字句
+    expect(thrown?.message).toContain('把 skills/ 內的 stub 檔換成同名資料夾');
+    expect(thrown?.message).toContain('改用 git clone');
   });
 
   it('throws ARS_REQUIRES_INTERACTIVE when spawning non-interactively', () => {
@@ -337,5 +470,100 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
     const params: SpawnParams = { agentId: 'publication-operator', task: 'x', projectId: null };
     expect(() => buildClaudeArgs(params, 'sess-err-noninteractive', 'sonnet', 10, false, false, false))
       .toThrow(/^ARS_REQUIRES_INTERACTIVE:/);
+  });
+
+  // ─── MN-7.1/MN-7.2: contract coverage gaps flagged by G2 review ───────────
+
+  it('MN-7.1: engineering department normal spawn never queries ars.plugin-dir', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'backend-architect' ? { department: 'engineering' } : undefined,
+    );
+    configureDb({}); // no ars.plugin-dir configured — must never even be asked for
+
+    const params: SpawnParams = { agentId: 'backend-architect', task: 'build the api', projectId: null };
+    buildClaudeArgs(params, 'sess-mn71', 'sonnet', 10, true, false, false);
+
+    expect(mockDbPrepare).not.toHaveBeenCalledWith(expect.anything(), ['ars.plugin-dir']);
+  });
+
+  it('MN-7.2: error priority is ARS_PATH_NOT_SET before ARS_REQUIRES_INTERACTIVE (non-interactive + unset)', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    configureDb({ arsPluginDir: null }); // unset
+
+    const params: SpawnParams = { agentId: 'publication-operator', task: 'x', projectId: null };
+    // interactive = false AND ars.plugin-dir unset — spec order says path-not-set
+    // must win, not requires-interactive.
+    expect(() => buildClaudeArgs(params, 'sess-mn72', 'sonnet', 10, false, false, false))
+      .toThrow(/^ARS_PATH_NOT_SET:/);
+  });
+
+  // ─── MN-2: ars.plugin-dir value is trimmed and unquoted ───────────────────
+
+  it('MN-2: strips a matching pair of double quotes from ars.plugin-dir (Windows "Copy as path")', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    configureDb({ arsPluginDir: `"${ARS_DIR}"` });
+    setupArsFs(true);
+
+    const params: SpawnParams = { agentId: 'publication-operator', task: 'x', projectId: null };
+    const { args } = buildClaudeArgs(params, 'sess-mn2-quotes', 'sonnet', 10, true, false, false);
+
+    const idx = args.indexOf('--plugin-dir');
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe(ARS_DIR); // quotes stripped, no literal '"' in the arg
+  });
+
+  it('MN-2: trims surrounding whitespace from ars.plugin-dir', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    configureDb({ arsPluginDir: `  ${ARS_DIR}  \n` });
+    setupArsFs(true);
+
+    const params: SpawnParams = { agentId: 'publication-operator', task: 'x', projectId: null };
+    const { args } = buildClaudeArgs(params, 'sess-mn2-trim', 'sonnet', 10, true, false, false);
+
+    const idx = args.indexOf('--plugin-dir');
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe(ARS_DIR);
+  });
+
+  it('MN-2: a whitespace-only ars.plugin-dir value is treated as unset (ARS_PATH_NOT_SET)', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    configureDb({ arsPluginDir: '   ' });
+
+    const params: SpawnParams = { agentId: 'publication-operator', task: 'x', projectId: null };
+    expect(() => buildClaudeArgs(params, 'sess-mn2-blank', 'sonnet', 10, true, false, false))
+      .toThrow(/^ARS_PATH_NOT_SET:/);
+  });
+
+  // ─── MN-6: DB exception reading ars.plugin-dir surfaces as ARS_PATH_NOT_SET ─
+
+  it('MN-6: a DB exception while reading ars.plugin-dir is surfaced as ARS_PATH_NOT_SET (not a raw SQL error)', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    mockDbPrepare.mockImplementation((sql: string) => {
+      if (/FROM user_preferences WHERE key = \?/i.test(sql)) {
+        throw new Error('database is locked');
+      }
+      return [];
+    });
+
+    const params: SpawnParams = { agentId: 'publication-operator', task: 'x', projectId: null };
+    let thrown: Error | undefined;
+    try {
+      buildClaudeArgs(params, 'sess-mn6', 'sonnet', 10, true, false, false);
+    } catch (err) {
+      thrown = err as Error;
+    }
+
+    expect(thrown?.message).toMatch(/^ARS_PATH_NOT_SET:/);
+    expect(thrown?.message).toContain('database is locked');
   });
 });

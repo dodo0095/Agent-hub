@@ -110,9 +110,10 @@ Skill 執行完成後的產出必須符合：
 
 | 條件 | 行為 |
 |------|------|
-| agent.department === `academic-publication`（一般啟動或 resume） | 依序：讀 `ars.plugin-dir` → `validateArsPluginDir()` → 檢查互動模式 → `args.push('--plugin-dir', <path>)` |
+| agent.department === `academic-publication`（一般啟動或 resume） | 依序：讀 `ars.plugin-dir`（trim、去除首尾成對雙引號）→ `validateArsPluginDir()` → 檢查互動模式 → `args.push('--plugin-dir', <path>)`。一般啟動時此檢查在任何寫檔之前執行 |
 | 其他部門 | 參數與 Sprint 7 前**完全相同**（不讀設定、不驗證、不加參數） |
 | 判斷依據 | 用 department，不寫死 agent id |
+| 找出 agent（resume） | `isResume`：`claude_sessions.agent_id`（依 `resumeSessionId`）。`isDirectResume`：`params.agentId` 非空則用之；否則以 `resumeConversationId` 查 `claude_sessions` 中 `agent_id` 有效（非 null／空／`(resumed)`）的最早一筆。查不到或 DB 例外 → 視為非出版部，不拋錯 |
 
 ### 6.3 驗證器
 
@@ -131,13 +132,13 @@ export function validateArsPluginDir(dir: string): ArsValidationResult;
 
 - 路徑不存在 → `{ ok: false, missing: [全部 ARS_REQUIRED_FILES] }`
 - `skills/<name>` 是檔案而非資料夾（zip 解壓的 symlink stub，PM-015）→ 對應 `SKILL.md` 列入 `missing`
-- 只檢查存在性，不解析內容
+- 只檢查「存在且為檔案」（同名資料夾不算），不解析內容
 
 ### 6.4 錯誤碼
 
 | 錯誤碼 | 觸發條件 | 訊息須包含 |
 |--------|---------|-----------|
-| `ARS_PATH_NOT_SET` | `ars.plugin-dir` 未設定或空字串 | 到「設定」填寫 ARS 路徑的提示 |
+| `ARS_PATH_NOT_SET` | `ars.plugin-dir` 未設定、空字串或純空白；或讀取設定時 DB 例外 | 到「設定」填寫 ARS 路徑的提示；DB 例外時附原錯誤訊息 |
 | `ARS_INSTALL_INCOMPLETE` | 驗證器 `ok === false` | 缺少的檔案清單；「若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone」 |
 | `ARS_REQUIRES_INTERACTIVE` | 出版部 agent 以非互動模式（`interactive === false`）啟動 | 「ARS 檢查點必須由老闆回覆，出版部只能以互動模式啟動」 |
 

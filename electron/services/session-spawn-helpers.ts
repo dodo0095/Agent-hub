@@ -43,8 +43,21 @@ const ARS_DEPARTMENT = 'academic-publication';
 function resolveArsPluginDir(department: string | undefined, interactive: boolean): string | null {
   if (department !== ARS_DEPARTMENT) return null;
 
-  const rows = database.prepare('SELECT value FROM user_preferences WHERE key = ?', ['ars.plugin-dir']);
-  const arsPath: string = rows.length > 0 ? rows[0].value : '';
+  // MN-6 (G2 review): a DB exception here must not leak a raw sql.js error
+  // (no ARS_* prefix, unreadable in the UI) — surface it as ARS_PATH_NOT_SET.
+  let rawValue: string;
+  try {
+    const rows = database.prepare('SELECT value FROM user_preferences WHERE key = ?', ['ars.plugin-dir']);
+    rawValue = rows.length > 0 ? rows[0].value : '';
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`ARS_PATH_NOT_SET: 無法讀取 ARS 路徑設定（${reason}）`, { cause: err });
+  }
+
+  // MN-2 (G2 review): trim whitespace and strip a matching pair of leading/
+  // trailing double quotes (Windows "Copy as path" wraps paths in quotes).
+  // A whitespace-only value must be treated the same as unset.
+  const arsPath = rawValue.trim().replace(/^"(.*)"$/, '$1').trim();
   if (!arsPath) {
     throw new Error('ARS_PATH_NOT_SET: 尚未設定 ARS 路徑，請到「設定」填寫 ARS 路徑');
   }
@@ -110,11 +123,38 @@ export function buildClaudeArgs(
   if (isDirectResume) {
     logger.info(`Direct resume conversation ${params.resumeConversationId} as new session ${sessionId}`);
     const directResumeArgs = ['--resume', params.resumeConversationId!];
-    // No session row to look up an original agent from — fall back to
-    // params.agentId (always populated; see SpawnParams), matching how
-    // session-manager.ts itself resolves agentId/agentName for direct resume.
-    const directResumeAgent = agentLoader.getAgent(params.agentId);
-    injectArsPluginDirIfNeeded(directResumeArgs, directResumeAgent?.department, interactive);
+    // G2 review MJ-1: params.agentId is NOT reliably populated for direct
+    // resume — the sole caller (src/stores/sessions.ts resumeByConversationId)
+    // always passes agentId: ''. Falling back to it silently dropped ARS for
+    // resumed academic-publication sessions. Prefer params.agentId only when
+    // it is actually non-empty; otherwise look up the original agent from the
+    // earliest claude_sessions row that recorded a real agent_id for this
+    // conversation (placeholder values 'null'/''/'(resumed)' excluded).
+    const directAgentId = params.agentId && params.agentId.trim() !== '' ? params.agentId : null;
+    let directResumeDepartment: string | undefined;
+    if (directAgentId) {
+      directResumeDepartment = agentLoader.getAgent(directAgentId)?.department;
+    } else {
+      try {
+        const rows = database.prepare(
+          `SELECT agent_id FROM claude_sessions
+           WHERE claude_conversation_id = ?
+             AND agent_id IS NOT NULL AND agent_id != '' AND agent_id != '(resumed)'
+           ORDER BY started_at ASC
+           LIMIT 1`,
+          [params.resumeConversationId],
+        );
+        if (rows.length > 0 && rows[0].agent_id) {
+          directResumeDepartment = agentLoader.getAgent(rows[0].agent_id)?.department;
+        }
+      } catch (err) {
+        // Lookup failure must not break direct resume for non-publication
+        // agents — treat as "original agent unknown" (no-op, same as if no
+        // row had matched).
+        logger.warn('Failed to look up original agent for direct resume', err);
+      }
+    }
+    injectArsPluginDirIfNeeded(directResumeArgs, directResumeDepartment, interactive);
     return { args: directResumeArgs, tmpFile: null };
   }
 

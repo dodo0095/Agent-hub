@@ -69,6 +69,22 @@ describe('validateArsPluginDir', () => {
     expect(result.missing).not.toContain('skills/academic-paper/SKILL.md');
   });
 
+  it('reports SKILL.md as missing when it is a directory instead of a file (MN-3, G2 review)', () => {
+    const dir = makeTempDir();
+    writeCompleteArs(dir);
+
+    // A directory happening to share the required file's name must NOT
+    // satisfy the requirement — only a real file counts.
+    const skillMdPath = join(dir, 'skills', 'deep-research', 'SKILL.md');
+    rmSync(skillMdPath, { force: true });
+    mkdirSync(skillMdPath, { recursive: true });
+
+    const result = validateArsPluginDir(dir);
+
+    expect(result.ok).toBe(false);
+    expect(result.missing).toContain('skills/deep-research/SKILL.md');
+  });
+
   it('returns ok: false with every required file missing when the path does not exist', () => {
     const dir = join(makeTempDir(), 'does-not-exist');
 

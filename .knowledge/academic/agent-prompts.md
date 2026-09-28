@@ -437,3 +437,4 @@ boss ← project-lead ← research-director (L1)
 - ARS 檢查點直接交給老闆回覆，**任何 agent 不得代答**
 - 例外（誠信檢查連 3 輪不過、Reject、成本或時程超支）→ 回報總監，由總監召集老闆
 - ARS 未載入 → 停止並回報，不得模擬 ARS 或改用研究部 Skills
+- 個人資料只讀專案內 scholar-profile.md／venue-list.md，不讀取其他含個資的檔案

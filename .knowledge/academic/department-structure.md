@@ -37,7 +37,7 @@
 | manages | `["literature-scout", "paper-writer", "research-analyst", "manuscript-reviewer", "research-visualizer", "grant-writer", "publication-operator"]`（v2.0 加入出版部操作員） |
 | collaborates_with | `["product-manager", "tech-lead"]` |
 | skills | `["hypothesis", "critical-thinking"]` |
-| skills_sub | 所有下屬 Skills（統籌時可代呼叫） |
+| skills_sub | 研究部下屬 Skills（統籌時可代呼叫；**不含 ARS**——ARS 只在出版部 session 載入） |
 | system_prompt_ref | `.knowledge/academic/agent-prompts.md#research-director` |
 | 負責流程 | 四條全流程統籌 + 最終審核 |
 
@@ -208,7 +208,7 @@
 | skills | ARS（`/ars-*` 指令與 4 個 ARS skills，由 Hub 啟動時注入） |
 | system_prompt_ref | `agents/definitions/academic-publication/publication-operator.md` |
 | 負責流程 | 整篇論文、系統性文獻回顧、大修與回覆信、投稿前體檢（README 分流表中標「出版部」者） |
-| 硬性規則 | 開案簡報經老闆確認才開跑；不代答 ARS 檢查點；例外情況回報總監 |
+| 硬性規則 | 開案簡報經老闆確認才開跑；不代答 ARS 檢查點；例外情況回報總監；個人資料只讀專案內 scholar-profile.md／venue-list.md |
 
 ### 兩部門指揮鏈（v2.0）
 
