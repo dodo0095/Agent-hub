@@ -16,6 +16,7 @@ const DEPARTMENT_LABELS: Record<string, string> = {
   company: '公司管理',
   bonus: '特殊',
   'academic-research': '學術研究部',
+  'academic-publication': '學術出版部',
 };
 
 const DEPARTMENT_COLORS: Record<string, string> = {
@@ -29,6 +30,7 @@ const DEPARTMENT_COLORS: Record<string, string> = {
   company: 'cyan',
   bonus: 'purple',
   'academic-research': 'indigo',
+  'academic-publication': 'orange',
 };
 
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
@@ -94,6 +96,8 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   'manuscript-reviewer': '稿件審查員',
   'research-visualizer': '研究視覺化員',
   'grant-writer': '計畫申請撰寫員',
+  // academic-publication
+  'publication-operator': '出版流程操作員',
 };
 
 /**

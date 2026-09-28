@@ -10,8 +10,67 @@ import { app } from 'electron';
 import { database } from './database';
 import { promptAssembler } from './prompt-assembler';
 import { agentLoader } from './agent-loader';
+import { validateArsPluginDir } from '../utils/ars-validator';
 import { logger } from '../utils/logger';
 import type { SpawnParams, AgentMcpConfig, McpServerConfig } from '../types';
+
+/** Department whose sessions load the ARS (Academic Research Skills) Claude plugin. */
+const ARS_DEPARTMENT = 'academic-publication';
+
+/**
+ * Sprint 7 — ARS 整合: resolve the ARS plugin directory to load for a session
+ * whose agent belongs to `department`, or `null` when that department is not
+ * academic-publication (no-op — every other department is unaffected). See
+ * `.knowledge/specs/api-design.md` §6.2/§6.4.
+ *
+ * Pure validation, no side effects (no args mutation, no file writes) — this
+ * is deliberate so callers can run it *before* any write/spawn side effect
+ * and have it throw first. L1 review (2026-09-28) flagged that running this
+ * at the end of the normal-spawn path let the system-prompt temp file,
+ * statusLine settings file, and skill-sync SKILL.md all get written before
+ * an ARS error aborted the spawn, leaving orphan files on disk.
+ *
+ * Order (must match spec exactly):
+ *   1. read `ars.plugin-dir` from user_preferences → unset/empty → ARS_PATH_NOT_SET
+ *   2. validateArsPluginDir() → not ok → ARS_INSTALL_INCOMPLETE
+ *   3. interactive === false → ARS_REQUIRES_INTERACTIVE
+ *   4. return the validated path
+ *
+ * Errors are thrown before any session/DB/pty state is created (caller —
+ * session-manager.ts `spawn()` — calls `buildClaudeArgs` before it inserts
+ * the `claude_sessions` row or starts the PTY).
+ */
+function resolveArsPluginDir(department: string | undefined, interactive: boolean): string | null {
+  if (department !== ARS_DEPARTMENT) return null;
+
+  const rows = database.prepare('SELECT value FROM user_preferences WHERE key = ?', ['ars.plugin-dir']);
+  const arsPath: string = rows.length > 0 ? rows[0].value : '';
+  if (!arsPath) {
+    throw new Error('ARS_PATH_NOT_SET: 尚未設定 ARS 路徑，請到「設定」填寫 ARS 路徑');
+  }
+
+  const validation = validateArsPluginDir(arsPath);
+  if (!validation.ok) {
+    throw new Error(
+      `ARS_INSTALL_INCOMPLETE: 缺少 ${validation.missing.join(', ')}；若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone`,
+    );
+  }
+
+  if (!interactive) {
+    throw new Error('ARS_REQUIRES_INTERACTIVE: ARS 檢查點必須由老闆回覆，出版部只能以互動模式啟動');
+  }
+
+  return arsPath;
+}
+
+/**
+ * Resume paths (`--resume` / direct resume) never write files before this
+ * point, so validate-then-push in one step is safe here.
+ */
+function injectArsPluginDirIfNeeded(args: string[], department: string | undefined, interactive: boolean): void {
+  const arsPath = resolveArsPluginDir(department, interactive);
+  if (arsPath) args.push('--plugin-dir', arsPath);
+}
 
 /** Resolve path to the statusline Node.js script (works in both dev and packaged). */
 function getStatuslineScriptPath(): string {
@@ -50,17 +109,27 @@ export function buildClaudeArgs(
 ): { args: string[]; tmpFile: string | null } {
   if (isDirectResume) {
     logger.info(`Direct resume conversation ${params.resumeConversationId} as new session ${sessionId}`);
-    return { args: ['--resume', params.resumeConversationId!], tmpFile: null };
+    const directResumeArgs = ['--resume', params.resumeConversationId!];
+    // No session row to look up an original agent from — fall back to
+    // params.agentId (always populated; see SpawnParams), matching how
+    // session-manager.ts itself resolves agentId/agentName for direct resume.
+    const directResumeAgent = agentLoader.getAgent(params.agentId);
+    injectArsPluginDirIfNeeded(directResumeArgs, directResumeAgent?.department, interactive);
+    return { args: directResumeArgs, tmpFile: null };
   }
 
   if (isResume) {
     let claudeConvId: string | null = null;
+    let resumeAgentId: string | null = null;
     try {
       const rows = database.prepare(
-        'SELECT claude_conversation_id FROM claude_sessions WHERE id = ?',
+        'SELECT claude_conversation_id, agent_id FROM claude_sessions WHERE id = ?',
         [params.resumeSessionId],
       );
-      if (rows.length > 0) claudeConvId = rows[0].claude_conversation_id;
+      if (rows.length > 0) {
+        claudeConvId = rows[0].claude_conversation_id;
+        resumeAgentId = rows[0].agent_id;
+      }
     } catch (err) {
       logger.warn('Failed to look up claude_conversation_id', err);
     }
@@ -68,10 +137,19 @@ export function buildClaudeArgs(
       throw new Error(`Cannot resume: no Claude conversation ID found for session ${params.resumeSessionId}`);
     }
     logger.info(`Resuming session ${params.resumeSessionId} (claude conv: ${claudeConvId}) as new session ${sessionId}`);
-    return { args: ['--resume', claudeConvId], tmpFile: null };
+    const resumeArgs = ['--resume', claudeConvId];
+    const resumeAgent = resumeAgentId ? agentLoader.getAgent(resumeAgentId) : undefined;
+    injectArsPluginDirIfNeeded(resumeArgs, resumeAgent?.department, interactive);
+    return { args: resumeArgs, tmpFile: null };
   }
 
-  // Normal spawn: assemble system prompt and write to temp file
+  // Normal spawn: resolve/validate ARS plugin-dir FIRST — before any file is
+  // written (system-prompt temp file, statusLine settings, skill-sync
+  // SKILL.md) — so an ARS_* error aborts cleanly with zero orphan files.
+  const spawnAgent = agentLoader.getAgent(params.agentId);
+  const arsPluginDir = resolveArsPluginDir(spawnAgent?.department, interactive);
+
+  // Assemble system prompt and write to temp file
   const systemPrompt = promptAssembler.assemble(params.agentId, params.projectId, {
     parentSessionId: params.parentSessionId,
     taskId: params.taskId || undefined,
@@ -219,6 +297,13 @@ export function buildClaudeArgs(
   } catch (err) {
     // MCP injection failure must not block session spawn (graceful degradation)
     logger.warn(`Failed to inject MCP config for session ${sessionId}: ${err}`);
+  }
+
+  // ── ARS plugin-dir injection (Sprint 7) ───────────────────────────────────
+  // Validation already happened at the top of this branch (before any file
+  // write) — here we only append the flag once the path is known-good.
+  if (arsPluginDir) {
+    args.push('--plugin-dir', arsPluginDir);
   }
 
   return { args, tmpFile };

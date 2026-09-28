@@ -218,8 +218,8 @@ T7 為真實 Hub 啟動驗證（非自動化），證據存 `docs/reviews/sprint
 
 | 任務 | 完成日期 | 結果 | 備註 |
 |------|---------|------|------|
-| T1 | | | |
-| T2 | | | |
+| T1 | 2026-09-28 | ✅ 完成 | 四份規範升 v2.0（commit 7e6487f）；補 ARS 檢查點不算越級匯報的例外條款 |
+| T2 | 2026-09-28 | ✅ 完成 | publication-operator.md 新增；research-director manages 7 位＋出版部管控四點；gray-matter 解析驗證通過（commit 7e6487f） |
 | T3 | | | |
 | T4 | | | |
 | T5 | | | |

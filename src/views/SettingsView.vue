@@ -19,6 +19,7 @@ const saveMessage = ref('');
 const form = ref({
   language: 'zh-TW',
   projectRoot: '',
+  'ars.plugin-dir': '',
 });
 
 const clearing = ref(false);
@@ -113,6 +114,23 @@ async function save() {
               class="field-input field-input--full"
             />
             <p class="field-hint">{{ $t('settings.projectRootHint') }}</p>
+          </div>
+        </div>
+
+        <!-- Academic Publication -->
+        <div class="settings-card">
+          <p class="settings-section-title">{{ $t('settings.academicPublication') }}</p>
+
+          <div class="form-field">
+            <label class="field-label">{{ $t('settings.arsPath') }}</label>
+            <input
+              v-model="form['ars.plugin-dir']"
+              type="text"
+              :placeholder="$t('settings.arsPathPlaceholder')"
+              class="field-input field-input--full"
+            />
+            <p class="field-hint">{{ $t('settings.arsPathHint') }}</p>
+            <p class="field-hint">{{ $t('settings.arsPathLicense') }}</p>
           </div>
         </div>
 
