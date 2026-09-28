@@ -74,7 +74,7 @@ describe('SessionLauncher — launch failure feedback', () => {
     wrapper = undefined;
   });
 
-  it('shows an ARS_PATH_NOT_SET toast with the unwrapped, human-readable message and keeps the launcher open', async () => {
+  it('shows an ARS_PATH_NOT_SET toast with i18n-only text (no backend Chinese leaking into the en UI) and keeps the launcher open', async () => {
     vi.mocked(window.maestro.sessions.spawn).mockRejectedValue(
       new Error(
         "Error invoking remote method 'sessions:spawn': Error: ARS_PATH_NOT_SET: 尚未設定 ARS 路徑，請到「設定」填寫 ARS 路徑",
@@ -93,14 +93,38 @@ describe('SessionLauncher — launch failure feedback', () => {
     const toast = uiStore.toasts[0];
     expect(toast.type).toBe('error');
     expect(toast.title).toBe('ARS Path Not Set');
-    // IPC wrapper + inner "Error:" prefix must be stripped — only the ARS detail + hint remain.
+    // MN-10: the toast must be pure i18n text — the IPC wrapper is stripped
+    // AND the backend's Chinese detail is not echoed into the en UI.
+    expect(toast.message).toBe('Go to Settings → Academic Publication to set the ARS path.');
     expect(toast.message).not.toContain('Error invoking remote method');
-    expect(toast.message).toContain('尚未設定 ARS 路徑，請到「設定」填寫 ARS 路徑');
-    expect(toast.message).toContain('Academic Publication');
+    expect(toast.message).not.toContain('尚未設定 ARS 路徑');
 
     // Launcher must stay open on failure.
     expect(wrapper.emitted('close')).toBeUndefined();
     expect(wrapper.emitted('launched')).toBeUndefined();
+  });
+
+  it('keeps the backend detail verbatim for ARS_INSTALL_INCOMPLETE (dynamic missing-file list)', async () => {
+    vi.mocked(window.maestro.sessions.spawn).mockRejectedValue(
+      new Error(
+        "Error invoking remote method 'sessions:spawn': Error: ARS_INSTALL_INCOMPLETE: 缺少 skills/academic-paper/SKILL.md；若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone",
+      ),
+    );
+
+    wrapper = mountLauncher(pinia);
+    await wrapper.setProps({ show: true });
+    await flushPromises();
+
+    findLaunchButton().click();
+    await flushPromises();
+
+    const uiStore = useUiStore(pinia);
+    expect(uiStore.toasts).toHaveLength(1);
+    const toast = uiStore.toasts[0];
+    expect(toast.title).toBe('ARS Installation Incomplete');
+    expect(toast.message).toBe(
+      '缺少 skills/academic-paper/SKILL.md；若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone',
+    );
   });
 
   it('shows a generic launch-failed toast for non-ARS errors, with the message unwrapped', async () => {

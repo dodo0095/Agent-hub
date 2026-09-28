@@ -3,11 +3,14 @@ import { ref, computed, defineAsyncComponent, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useHarnessStore } from '../stores/harness';
 import { useSessionsStore, type ActiveSession } from '../stores/sessions';
+import { useUiStore } from '../stores/ui';
+import { notifySpawnError } from '../utils/spawn-error';
 import SessionTerminal from '../components/session/SessionTerminal.vue';
 
 const { t } = useI18n();
 const harnessStore = useHarnessStore();
 const sessionsStore = useSessionsStore();
+const uiStore = useUiStore();
 
 const SkillTab = defineAsyncComponent(() => import('../components/harness/SkillTab.vue'));
 const HookTab = defineAsyncComponent(() => import('../components/harness/HookTab.vue'));
@@ -92,6 +95,7 @@ async function launchSession() {
     if (session) activeSession.value = session;
   } catch (err) {
     console.error('Failed to launch harness-manager session', err);
+    notifySpawnError(err, t, uiStore);
   } finally {
     launching.value = false;
   }

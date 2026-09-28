@@ -17,6 +17,7 @@ import { useTasksStore } from '../stores/tasks';
 import { useUiStore } from '../stores/ui';
 import { useRouter, useRoute } from 'vue-router';
 import { formatTokens } from '../utils/format-tokens';
+import { notifySpawnError } from '../utils/spawn-error';
 import { useIpc } from '../composables/useIpc';
 import BaseButton from '../components/common/BaseButton.vue';
 import SessionGrid from '../components/session/SessionGrid.vue';
@@ -225,6 +226,7 @@ async function handleResumeConversation(item: ResumableSession) {
     activeViewTab.value = 'active';
   } catch (err) {
     console.error('Failed to resume conversation', err);
+    notifySpawnError(err, t, uiStore);
   }
 }
 

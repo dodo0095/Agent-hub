@@ -300,3 +300,105 @@ undefined
 - 在 POSIX（Linux／macOS）上，`statSync` 遇到 ENOTDIR 時 `throwIfNoEntry: false` 是否同樣回傳 undefined：只在 Windows 實測。Hub 目前只跑 Windows，影響低。
 - MN-8 的情境在 GUI 上是否真的能觸發：沒有實測。
 - 真實 Hub 啟動（T7 範圍）、`preflight.cjs`、`npm run build`：本輪也沒有執行。
+
+---
+
+## 第三輪 Review（commit 0a55011）
+
+> 審查者：同一位獨立 reviewer（未參與修正）
+> 日期：2026-09-28
+> 範圍：`git diff 5219afa..0a55011`（12 檔，+653 / −22；含本報告第二輪節與 `docs/reviews/sprint7-t7-evidence.md`）
+> 判定：**❌ 不通過**（🔴 0 / 🟠 1 / 🟡 2 新增）
+
+### R3-1. MN-8／MN-9 結果
+
+| # | 結果 | 證據 |
+|---|:--:|------|
+| MN-8 | ✅ 已修 | 抽出共用函式 `lookupOriginalAgentIdByConversation`（`session-spawn-helpers.ts:108-124`），SQL 和 fallback 與第二輪相同。isResume 分支在 agent_id 為 null、空字串或 `'(resumed)'` 時，改用該 session 的 `claude_conversation_id` 反查（`:212-216`）。api-design §6.2「找出 agent（resume）」列已同步，程式碼與規範逐項相符。新增 2 個測試：「接回的 session 可追溯到出版部 → 含 `--plugin-dir`」和「追溯不到 → 不拋錯、參數不變」，都用 `toEqual` 斷言完整參數陣列 |
+| MN-9 | ✅ 已修 | `:169-172` 的註解改成 `NULL/''/'(resumed)'`，和 SQL 一致 |
+
+**非出版部 session 是否多出新的拋錯路徑：沒有。**
+- 共用函式在 conversationId 為空時直接回傳 null。
+- DB 查詢包在 try/catch 內，失敗只記 `logger.warn`，回傳 null。
+- `agentLoader.getAgent` 只是 Map 查找，不會拋錯。
+- 唯一的行為差異：原 session 的 agent_id 是空值或 `'(resumed)'` 時，resume 會多做一次讀取查詢；規範已寫入。
+
+### R3-2. 前端錯誤呈現（對照 api-design §6.4、技術決策書約束 3）
+
+| 項目 | 結果 | 證據 |
+|------|:--:|------|
+| `extractIpcErrorMessage` 剝掉 IPC 前綴 | ✅ | `src/utils/ipc-error.ts:12-24`：剝掉 `Error invoking remote method '…':` 和內層的 `Error:`；空值時回傳 fallback |
+| `parseArsError` 解析錯誤碼 | ✅ | `:45-53`：只認 §6.4 的三個錯誤碼加冒號開頭，其他錯誤回傳 null |
+| SessionLauncher 顯示錯誤 | ✅ | `SessionLauncher.vue:239-251`：ARS 錯誤依錯誤碼顯示對應標題的 error toast；`ARS_PATH_NOT_SET` 額外附上「設定 → 學術出版部」的提示；非 ARS 錯誤顯示通用的「啟動失敗」toast。`App.vue:84` 有掛載 `ToastContainer`，預設顯示 5 秒 |
+| i18n | ✅ | zh-TW／en 各新增 6 個 key，兩邊對齊 |
+| **resume 入口的錯誤呈現** | ❌ | 見 **MJ-3** |
+
+### R3-3. `tests/setup.ts` 的改動
+
+- **沒有違反 PM-012**：只在既有的 `mockMaestro.on` 物件上新增 8 個 `vi.fn()`（`tests/setup.ts:169-176`）。window 沒有被整顆替換，仍沿用 `:180` 的掛載方式。
+- **補上的清單和 preload 完全一致**：`electron/preload.ts` 的 `on:` 區塊（`:294-306`）共 13 個事件，setup 補齊後是同樣的 13 個，沒有多餘或捏造的 API。
+- **既有測試沒有失去意義**：以前沒 mock 的事件訂閱在測試裡會直接拋 TypeError，現在改為不做任何事。這不會掩蓋任何既有斷言。完整測試一次全過（見 R3-6）。
+
+### R3-4. 新測試品質
+
+| 檔案 | 結果 | 說明 |
+|------|:--:|------|
+| `tests/unit/ipc-error.test.ts` | ✅ | 精確比對字串：剝 IPC 前綴、沒有前綴、純字串、fallback 三種值、3 個錯誤碼的 `it.each`、非 ARS 錯誤回傳 null |
+| `tests/components/SessionLauncher.test.ts` | ✅ | 透過真實的 Launch 按鈕點擊，斷言 toast 的數量、類型、標題、訊息內容，以及失敗時不發出 `close`／`launched`、成功時發出 `launched` 並關閉。Teleport 的節點在 `afterEach` unmount，避免拿到上一個測試殘留的 DOM。mock 只重設 `window.maestro.*`，沒有替換 window |
+| session-spawn-helpers MN-8 兩案 | ✅ | 見 R3-1 |
+
+### R3-5. 問題清單
+
+#### 🟠 MJ-3：「可恢復對話」的 resume 入口仍然吞掉 ARS 錯誤，老闆看不到任何提示
+
+- **位置**：`src/views/SessionsView.vue:222-228`（`handleResumeConversation` 的 catch 只有 `console.error`）；呼叫鏈是 `SessionsView.vue:497` 的 Resume 按鈕 → `sessionsStore.resumeByConversationId` → direct resume。
+- **問題**：本輪只修了 SessionLauncher 這一個入口。老闆從歷史清單按 Resume 接回一篇中斷的出版部論文時，如果 ARS 在這期間被移動、刪除或更新成 zip stub，後端會正確拋出 `ARS_INSTALL_INCOMPLETE`（MJ-1 修正後，這條路徑一定會做 ARS 驗證），但畫面上什麼都不會發生。
+  - 這違反技術決策書約束 3「ARS 路徑未設定或不存在時，要清楚報錯並提示安裝方式」。
+  - feature-spec §6.3 明列兩個相關情境：「resume 中斷的出版部 session」和「設定了路徑但之後移動或刪除 ARS → 下次啟動時擋下」。擋下這件事做到了，但沒有任何提示。
+  - 在 `src/` 裡，這個按鈕是出版部 resume 唯一的 UI 入口；`sessionsStore.resume`（resumeSessionId 那條路徑）在 `src/` 沒有 UI 呼叫端。
+- **修改建議**：在 `handleResumeConversation` 的 catch 裡套用和 `SessionLauncher.vue:241-251` 相同的處理：`extractIpcErrorMessage` 加 `parseArsError`，再呼叫 `uiStore.addToast`。建議把這段抽成共用函式（例如 `src/utils/ipc-error.ts` 裡的 `toastSpawnError(err, t, uiStore)`），避免兩處邏輯分岔。另外補一個元件測試：resume 的 IPC 回傳 `ARS_INSTALL_INCOMPLETE` 時，應出現對應標題的 error toast。
+
+#### 🟡 MN-10：ARS_PATH_NOT_SET 的 toast 提示重複，en 介面會混入中文
+
+- **位置**：`SessionLauncher.vue:244-247`
+- **問題**：後端訊息本身已經寫了「請到「設定」填寫 ARS 路徑」，前端又附加一句 hint，同一件事說了兩次。錯誤細節是 main process 的中文字串，所以 en 介面的 toast 會是中文內文加英文 hint。
+- **建議**：ARS 錯誤的 toast 內文改用 i18n 文字（只保留 `ARS_INSTALL_INCOMPLETE` 的缺檔清單這種動態部分），或不再附加 hint。不影響功能，可以延後。
+
+#### 🟡 MN-11：T7 證據提到 resume 不會帶回 `--mcp-config`，尚未處理
+
+- **位置**：`docs/reviews/sprint7-t7-evidence.md:100`、`:164`；`session-spawn-helpers.ts` 中 MCP 注入那段的註解
+- **問題**：T7 在 claude CLI 2.1.283 上實測發現，`--resume` 不會自動帶回原 session 的 `--mcp-config`，和程式碼註解「resume sessions inherit the original session's MCP config automatically」不符。這表示任何部門的 session 經 resume 後都可能用不了 SendMessage。這不是本 Sprint 引入的問題，但已經有證據。
+- **建議**：用 `/pitfall-record` 記錄並建立 backlog，由技術負責人核實。不擋本 Sprint。
+
+### R3-6. 驗證指令輸出
+
+```
+$ git rev-parse --short HEAD        → 0a55011
+$ npx vitest run
+ Test Files  31 passed (31)
+      Tests  429 passed (429)       （第二輪 414 → +15）
+EXIT 0
+$ npm run lint
+✖ 128 problems (0 errors, 128 warnings)   EXIT 0（總數和前兩輪相同）
+$ npx eslint <本輪 5 個前端／測試檔>
+✖ 1 problem (0 errors, 1 warning)  （SessionLauncher.vue:196 `err` 未使用，這一行本輪沒有改動）
+$ npm run typecheck
+tsc -p tsconfig.node.json / tsconfig.web.json → 無錯誤   EXIT 0
+```
+
+### R3-7. 第三輪判定
+
+| 等級 | 數量 | 項目 |
+|------|:--:|------|
+| 🔴 Blocker | 0 | — |
+| 🟠 Major | 1 | MJ-3：「可恢復對話」的 resume 入口吞掉 ARS 錯誤 |
+| 🟡 Minor | 2（新增） | MN-10、MN-11 |
+
+**❌ 不通過**：依 `code-review.md:55-56`，有 Major 就不通過。MN-8、MN-9 已確實修正；後端 spawn 路徑和 SessionLauncher 的錯誤呈現都合格。修掉 MJ-3（預估改動很小：一個 catch 區塊加一個測試）即可再送複審。
+
+### R3-8. 第三輪未驗證項目
+
+- 真實 Hub GUI 上 toast 的實際樣子：沒有截圖，也沒有實際點擊（只有元件測試）。
+- `resumeSessionId` 那條路徑是否有 `src/` 以外的 UI 入口：只 grep 了 `src/`。
+- MN-11：`--resume` 不帶回 MCP config 是否是 CLI 的預期行為，沒有核實。
+- `preflight.cjs`、`npm run build`：本輪沒有執行。

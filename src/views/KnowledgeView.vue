@@ -5,6 +5,8 @@ import { useIpc } from '../composables/useIpc';
 import { useAgentsStore } from '../stores/agents';
 import { useProjectsStore } from '../stores/projects';
 import { useSessionsStore, type ActiveSession } from '../stores/sessions';
+import { useUiStore } from '../stores/ui';
+import { notifySpawnError } from '../utils/spawn-error';
 import BaseButton from '../components/common/BaseButton.vue';
 import BaseTag from '../components/common/BaseTag.vue';
 import SessionTerminal from '../components/session/SessionTerminal.vue';
@@ -14,6 +16,7 @@ const ipc = useIpc();
 const agentsStore = useAgentsStore();
 const projectsStore = useProjectsStore();
 const sessionsStore = useSessionsStore();
+const uiStore = useUiStore();
 
 // --- State ---
 interface TreeNode {
@@ -160,6 +163,7 @@ async function launchSession() {
     rightTab.value = 'session';
   } catch (err) {
     console.error('Failed to launch company-manager session', err);
+    notifySpawnError(err, t, uiStore);
   } finally {
     launching.value = false;
   }

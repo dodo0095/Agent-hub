@@ -134,6 +134,7 @@
       "arsInstallIncompleteTitle": "ARS Installation Incomplete",
       "arsRequiresInteractiveTitle": "ARS Requires Interactive Mode",
       "arsPathNotSetHint": "Go to Settings → Academic Publication to set the ARS path.",
+      "arsRequiresInteractiveHint": "Academic Publication sessions must be launched in interactive mode. Please retry using the normal launch flow.",
       "modelOpus": "Most Powerful",
       "modelSonnet": "Balanced",
       "modelHaiku": "Fast"

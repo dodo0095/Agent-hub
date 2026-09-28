@@ -134,6 +134,7 @@
       "arsInstallIncompleteTitle": "ARS 安裝不完整",
       "arsRequiresInteractiveTitle": "ARS 需要互動模式",
       "arsPathNotSetHint": "請到「設定 → 學術出版部」填寫 ARS 路徑。",
+      "arsRequiresInteractiveHint": "出版部 session 必須以互動模式啟動，請改用一般啟動方式重試。",
       "modelOpus": "最強大",
       "modelSonnet": "平衡",
       "modelHaiku": "快速"
