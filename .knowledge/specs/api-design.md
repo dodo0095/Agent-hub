@@ -1,6 +1,6 @@
 # Sprint 4 — Skill 命名與介面規範
 
-> 版本: v2.0 | Sprint 4 建立、Sprint 7 擴充（ARS 整合）| 最後更新: 2026-09-28
+> 版本: v2.0 | Sprint 4 建立、Sprint 7 擴充（ARS 整合）| 最後更新: 2026-09-28（含 Sprint 7.1）
 > 範圍: `academic-research` 部門新增的 13 個 Skills 命名與呼叫介面
 
 ## 概述
@@ -143,3 +143,47 @@ export function validateArsPluginDir(dir: string): ArsValidationResult;
 | `ARS_REQUIRES_INTERACTIVE` | 出版部 agent 以非互動模式（`interactive === false`）啟動 | 「ARS 檢查點必須由老闆回覆，出版部只能以互動模式啟動」 |
 
 錯誤以 `Error` 拋出，`message` 以錯誤碼開頭（例：`ARS_PATH_NOT_SET: ...`），session 不得被建立。
+
+---
+
+## 7. Sprint 7.1 — 自動啟動失敗回報、resume 保留 MCP（v2.1 新增）
+
+> 依據：`proposal/sprint7-dev-plan.md` 第 11 節；PM-016；backlog `S7-MN1`、`S7-resume-mcp-config-lost`
+
+### 7.1 resume 時重新注入 `--mcp-config`
+
+| 項目 | 規格 |
+|------|------|
+| 適用路徑 | 一般啟動（既有）、`isResume`、`isDirectResume` |
+| 產生方式 | 一般啟動與兩條 resume 共用同一個函式產生 mcp-agent-config 與 mcp-servers 設定檔（內容與 Sprint 7 前的一般啟動相同） |
+| agent 身分 | 與 §6.2「找出 agent（resume）」相同規則（含 `lookupOriginalAgentIdByConversation`）；找不到有效 agent → **不加** `--mcp-config`，行為與修正前相同 |
+| 失敗處理 | 與既有一般啟動相同：包在 try/catch，失敗只 `logger.warn`，**不得**讓 resume 失敗 |
+| 註解 | 移除「resume sessions inherit the original session's MCP config automatically」的錯誤說法（PM-016） |
+
+### 7.2 MessageBroker 自動啟動失敗
+
+適用 `message-broker.ts` 兩條 auto-spawn 路徑（InboxPoller、`tryDeliver`）。
+
+| 錯誤類型 | 行為 |
+|---------|------|
+| 訊息以 `ARS_` 開頭（設定類錯誤，重試無效） | (1) 對該目標 agent 進入**冷卻 5 分鐘**，期間不再嘗試 auto-spawn，訊息維持 pending；(2) 同一目標 agent＋同一錯誤碼在冷卻期內只通知一次；(3) 以 `fromAgent: 'system'` 回一封訊息給原發訊者（內容含目標 agent、錯誤碼、原錯誤訊息、「請告知老闆到『設定 → 學術出版部』處理」）；(4) 送 UI 通知（§7.3） |
+| 其他錯誤 | 維持現狀（`logger.warn`，下一輪重試） |
+| 防迴圈 | 原發訊者為 `system` 時不回訊息；system 回覆訊息本身若 auto-spawn 失敗，不再回覆 |
+
+### 7.3 UI 通知（沿用既有 `notification` 通道，不新增 IPC）
+
+既有通道 `IpcChannels.NOTIFICATION = 'notification'`，preload／useIpc／env.d.ts 已接好但目前無人送出、無人訂閱。本 Sprint 定義 payload：
+
+```typescript
+interface AppNotification {
+  level: 'error' | 'warning' | 'info';
+  code?: string;          // 例：'ARS_PATH_NOT_SET'
+  title?: string;         // 後端可不給，前端依 code 以 i18n 產生
+  message: string;        // 原錯誤訊息或說明
+  source: 'message-broker';
+  agentId?: string;       // 啟動失敗的目標 agent
+}
+```
+
+- 主程序以既有 `safeSend(IpcChannels.NOTIFICATION, payload)` 模式送出（透過 eventBus 事件 `app:notification`，與 `message:created` 相同接法）。
+- 前端在 App 層訂閱一次，`ARS_*` code 沿用 `src/utils/spawn-error.ts` 的 i18n 標題與 hint 規則顯示 toast；其他 code 顯示通用錯誤標題＋`message`。

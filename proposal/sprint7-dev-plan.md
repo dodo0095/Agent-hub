@@ -136,6 +136,11 @@ export function validateArsPluginDir(dir: string): ArsValidationResult;
 | T6 | 設定頁 ARS 路徑欄位 | SettingsView 新增欄位，存 `ars.plugin-dir`；附說明「zip 下載請確認 skills/ 內為資料夾」與授權連結；zh-TW / en 雙語 | frontend-developer | T1 | 實作 | 存取值正確；i18n 無缺 key；元件測試綠 |
 | T7 | 真實環境端到端驗證 | `npm run build` 後從 Hub 啟動 publication-operator：debug log 證實 Loaded 4 skills；與 `--mcp-config` 並用 SendMessage 仍可用；ARS `PreToolUse` guard 不與 Hub hooks 衝突；resume 後 ARS 仍在；路徑錯誤時 UI 有明確錯誤 | tech-lead（派 fresh-context agent 驗收） | T5, T6 | 測試 | 五項各附指令與輸出證據 |
 | T8 | 文件收尾 | README 🚧 → ✅ 並補安裝說明；`/pitfall-resolve` PM-015；backlog PM-015 標 done | tech-lead | T7 | 文件 | 文件與程式碼一致（G4 對規範 Review） |
+| T9 | resume 保留 MCP（PM-016） | 依 api-design §7.1：抽出 MCP 設定產生函式，兩條 resume 路徑共用；以 §6.2 規則找 agent；修正錯誤註解 | backend-architect | T8 | 實作 | 單元測試：兩條 resume 含 `--mcp-config`、找不到 agent 不含、產生失敗不讓 resume 拋錯；非 resume 行為不變 |
+| T10 | 自動啟動失敗回報 | 依 api-design §7.2：ARS_* 錯誤冷卻 5 分鐘、去重通知、system 回訊給發訊者、送 `app:notification`；防迴圈 | backend-architect | T8 | 實作 | 單元測試涵蓋兩條 auto-spawn 路徑、冷卻、去重、防迴圈、非 ARS 錯誤維持現狀 |
+| T11 | App 層通知顯示 | 依 api-design §7.3：main 送 `notification`；App 層訂閱並以 toast 顯示（ARS_* 沿用 spawn-error 規則）；tests/setup.ts 的 `maestro.on.notification` mock 已存在則沿用 | frontend-developer | T8 | 實作 | 元件或單元測試：收到 ARS_PATH_NOT_SET payload 顯示對應 toast；zh-TW／en key 一致 |
+| T12 | 7.1 端到端驗證與 Review | fresh-context agent：CLI 層實測 `--resume` ＋ `--mcp-config` 後 send-message 連線；broker 失敗流程以測試或腳本實證；G2 對程式碼＋對規範 | tech-lead（派 fresh-context agent） | T9, T10, T11 | 測試 | 證據寫入 `docs/reviews/sprint7.1-evidence.md`；Review 0 Blocker／0 Major |
+| T13 | 7.1 文件收尾 | README 移除「自動啟動失敗只記 log」限制說明；PM-016 resolved；兩個 backlog 標 done | tech-lead | T12 | 文件 | G4 文件一致性通過 |
 
 ### 依賴圖
 
@@ -212,6 +217,17 @@ T7 為真實 Hub 啟動驗證（非自動化），證據存 `docs/reviews/sprint
 
 ---
 
+## 11. Sprint 7.1 追加範圍（2026-09-28，老闆指示「現在修」）
+
+Sprint 7 交付後的兩個已知問題，併入 Sprint 7 一起結案（老闆：修完再一起確認 Gate）：
+
+| 問題 | 來源 | 任務 |
+|------|------|------|
+| resume 的 session 失去跨 agent 通訊（全部門） | T7 觀察、PM-016 | T9 |
+| 總監以訊息觸發自動啟動操作員失敗時畫面無提示，且每輪無限重試 | G2 MN-1、7.1 調查 | T10、T11 |
+
+規格見 `.knowledge/specs/api-design.md` §7。依賴：T9、T10、T11 可並行 → T12 → T13。
+
 ## 10. 任務與審核紀錄（備查）
 
 > 每個任務完成後記錄結果，每次 Review/Gate 通過後記錄決策。本區作為 Sprint 完整稽核軌跡。
@@ -228,6 +244,11 @@ T7 為真實 Hub 啟動驗證（非自動化），證據存 `docs/reviews/sprint
 | T6 | 2026-09-28 | ✅ 完成 | 設定頁 ARS 路徑；T7／G2 追加：所有啟動與接續入口失敗時顯示 toast（0a55011、f130d0f） |
 | T7 | 2026-09-28 | ✅ 完成 | CLI 層五項驗證（fresh-context agent），第 5 項原 ⚠️ 已修；GUI 畫面未截圖（未驗證）。證據 `docs/reviews/sprint7-t7-evidence.md` |
 | T8 | 2026-09-28 | ✅ 完成 | README 🚧→✅＋安裝說明與自動啟動限制；PM-015 resolved；PM-016 記錄 |
+| T9 | | | |
+| T10 | | | |
+| T11 | | | |
+| T12 | | | |
+| T13 | | | |
 
 ### Review 紀錄
 
