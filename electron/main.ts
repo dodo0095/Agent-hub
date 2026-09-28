@@ -136,6 +136,10 @@ function setupEventForwarding(): void {
   eventBus.on('agents:reloaded', (data) => safeSend(IpcChannels.AGENTS_RELOADED, data));
   eventBus.on('delegation:report', (data) => safeSend(IpcChannels.DELEGATION_REPORT, data));
   eventBus.on('message:created', (data) => safeSend(IpcChannels.MESSAGE_CREATED, data));
+  // T10 (Sprint 7.1, PM-016 follow-up): auto-spawn ARS_* failures and other
+  // backend errors surface as a toast via the existing `notification`
+  // channel — no new IPC channel (api-design §7.3).
+  eventBus.on('app:notification', (data) => safeSend(IpcChannels.NOTIFICATION, data));
   eventBus.on('message:delivered', (data) => safeSend(IpcChannels.MESSAGE_DELIVERED, data));
   eventBus.on('message:read', (data) => safeSend(IpcChannels.MESSAGE_READ, data));
   eventBus.on('task:updated', (data) => safeSend(IpcChannels.TASK_UPDATED, data));

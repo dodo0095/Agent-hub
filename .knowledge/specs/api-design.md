@@ -157,6 +157,7 @@ export function validateArsPluginDir(dir: string): ArsValidationResult;
 | 適用路徑 | 一般啟動（既有）、`isResume`、`isDirectResume` |
 | 產生方式 | 一般啟動與兩條 resume 共用同一個函式產生 mcp-agent-config 與 mcp-servers 設定檔（內容與 Sprint 7 前的一般啟動相同） |
 | agent 身分 | 與 §6.2「找出 agent（resume）」相同規則（含 `lookupOriginalAgentIdByConversation`）；找不到有效 agent → **不加** `--mcp-config`，行為與修正前相同 |
+| projectId | resume 時取原 session 的 `claude_sessions.project_id` 寫入 mcp-agent-config（訊息的專案歸屬與原 session 一致） |
 | 失敗處理 | 與既有一般啟動相同：包在 try/catch，失敗只 `logger.warn`，**不得**讓 resume 失敗 |
 | 註解 | 移除「resume sessions inherit the original session's MCP config automatically」的錯誤說法（PM-016） |
 

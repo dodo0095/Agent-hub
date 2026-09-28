@@ -732,5 +732,9 @@
       "sessions": "Sessions: {n} Running",
       "quit": "Quit"
     }
+  },
+  "notifications": {
+    "genericTitle": "Notification",
+    "agentTag": "[{agentId}]"
   }
 }

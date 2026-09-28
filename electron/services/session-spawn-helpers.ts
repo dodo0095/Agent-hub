@@ -85,42 +85,134 @@ function injectArsPluginDirIfNeeded(args: string[], department: string | undefin
   if (arsPath) args.push('--plugin-dir', arsPath);
 }
 
+/** Result of reverse-looking-up the original agent for a Claude conversation. */
+interface OriginalAgentLookup {
+  agentId: string;
+  projectId: string | null;
+}
+
 /**
- * Reverse-lookup the original agent_id for a Claude conversation from
- * `claude_sessions`, excluding rows whose `agent_id` is NULL, `''`, or the
- * `'(resumed)'` placeholder that direct-resume-created rows are stamped
- * with (see `session-manager.ts` where the new session row is inserted).
- * Returns the EARLIEST matching row's agent_id — the original spawn that
+ * Reverse-lookup the original agent (and its project) for a Claude
+ * conversation from `claude_sessions`, excluding rows whose `agent_id` is
+ * NULL, `''`, or the `'(resumed)'` placeholder that direct-resume-created
+ * rows are stamped with (see `session-manager.ts` where the new session row
+ * is inserted). Returns the EARLIEST matching row — the original spawn that
  * first established the conversation, before any resume rows existed for it.
  *
- * Shared by two callers (G2 review round 2, MN-8):
+ * Shared by three callers:
  * - direct resume (`resumeConversationId`), which has no session row of its
- *   own to consult for the original agent.
+ *   own to consult for the original agent (MJ-1, G2 review round 1).
  * - regular resume (`resumeSessionId`), when THAT session row's own
  *   `agent_id` is itself a placeholder — i.e. resuming a session that was
- *   previously created by a direct resume, which always stamps `'(resumed)'`.
- *   Without this fallback that second resume would silently drop ARS.
+ *   previously created by a direct resume, which always stamps `'(resumed)'`
+ *   (MN-8, G2 review round 2).
+ * - both of the above again for `--mcp-config` re-injection (T9, Sprint 7.1
+ *   PM-016): the effective agent used for the ARS department check is the
+ *   same one `--mcp-config` needs, so both resume paths reuse this lookup.
  *
  * No result (query finds nothing) or a DB exception are both treated as
  * "original agent unknown" — logged via `logger.warn` on exception, never
  * thrown. This must never break resume for non-publication conversations.
  */
-function lookupOriginalAgentIdByConversation(conversationId: string | null | undefined): string | null {
+function lookupOriginalAgentByConversation(conversationId: string | null | undefined): OriginalAgentLookup | null {
   if (!conversationId) return null;
   try {
     const rows = database.prepare(
-      `SELECT agent_id FROM claude_sessions
+      `SELECT agent_id, project_id FROM claude_sessions
        WHERE claude_conversation_id = ?
          AND agent_id IS NOT NULL AND agent_id != '' AND agent_id != '(resumed)'
        ORDER BY started_at ASC
        LIMIT 1`,
       [conversationId],
     );
-    if (rows.length > 0 && rows[0].agent_id) return rows[0].agent_id;
+    if (rows.length > 0 && rows[0].agent_id) {
+      return { agentId: rows[0].agent_id, projectId: rows[0].project_id ?? null };
+    }
   } catch (err) {
     logger.warn('Failed to look up original agent by conversation id', err);
   }
   return null;
+}
+
+/**
+ * Sprint 7.1 (T9, PM-016): generate the MCP inter-agent-communication config
+ * files and append `--mcp-config` to `args` — shared by the normal-spawn
+ * path AND both resume paths (`isResume`, `isDirectResume`). Before T9 this
+ * logic lived only in the normal-spawn branch with a comment incorrectly
+ * claiming "resume sessions inherit the original session's MCP config
+ * automatically" — they do not; Claude Code's `--resume` only restores the
+ * conversation transcript, not CLI flags from the original invocation, so
+ * every resumed academic session silently lost SendMessage/ListInbox.
+ *
+ * `effectiveAgentId` is whatever the caller already resolved as "the real
+ * agent for this session" (params.agentId for normal spawn; the
+ * `lookupOriginalAgentByConversation` result for either resume path). When
+ * it's null/undefined, or `agentLoader.getAgent` doesn't recognise it,
+ * this is a no-op — no `--mcp-config` is added, matching pre-T9 behaviour
+ * for "agent not found".
+ *
+ * Failures are caught and only `logger.warn`'d — this must never throw,
+ * particularly not on the resume paths where an MCP error must not block
+ * `--resume` itself (api-design §7.1).
+ */
+function injectMcpConfigIfNeeded(
+  args: string[],
+  effectiveAgentId: string | null | undefined,
+  projectId: string | null | undefined,
+  sessionId: string,
+  promptDir: string,
+): void {
+  try {
+    if (!effectiveAgentId) return;
+    const agentDef = agentLoader.getAgent(effectiveAgentId);
+    if (!agentDef) return;
+
+    const allowedTargets = [
+      ...(agentDef.manages ?? []),
+      ...(agentDef.reportsTo ? [agentDef.reportsTo] : []),
+      ...(agentDef.coordinatesWith ?? []),
+    ];
+
+    const mcpAgentConfig: AgentMcpConfig = {
+      agentId: effectiveAgentId,
+      allowedTargets,
+      inboxDir: join(homedir(), '.claude', 'teams', 'default', 'inboxes'),
+      projectId: projectId || null,
+      rateLimit: 20,
+    };
+
+    if (!existsSync(promptDir)) mkdirSync(promptDir, { recursive: true });
+
+    const mcpAgentConfigPath = join(promptDir, `mcp-agent-config-${sessionId.slice(0, 8)}.json`);
+    writeFileSync(mcpAgentConfigPath, JSON.stringify(mcpAgentConfig, null, 2), 'utf-8');
+
+    const serverScriptPath = getMcpServerPath();
+    if (existsSync(serverScriptPath)) {
+      const mcpServersConfig: McpServerConfig = {
+        mcpServers: {
+          'send-message': {
+            command: 'node',
+            args: [serverScriptPath, mcpAgentConfigPath],
+            type: 'stdio',
+          },
+        },
+      };
+      const mcpServersConfigPath = join(promptDir, `mcp-servers-${sessionId.slice(0, 8)}.json`);
+      writeFileSync(mcpServersConfigPath, JSON.stringify(mcpServersConfig), 'utf-8');
+      args.push('--mcp-config', mcpServersConfigPath);
+      logger.info(
+        `Session ${sessionId} MCP server injected` +
+          ` (${effectiveAgentId} → ${allowedTargets.length} targets: ${allowedTargets.join(', ')})`,
+      );
+    } else {
+      logger.warn(
+        `MCP server script not found at ${serverScriptPath}, SendMessage unavailable for session ${sessionId}`,
+      );
+    }
+  } catch (err) {
+    // MCP injection failure must not block session spawn/resume (graceful degradation).
+    logger.warn(`Failed to inject MCP config for session ${sessionId}: ${err}`);
+  }
 }
 
 /** Resolve path to the statusline Node.js script (works in both dev and packaged). */
@@ -158,6 +250,11 @@ export function buildClaudeArgs(
   isResume: boolean,
   isDirectResume: boolean,
 ): { args: string[]; tmpFile: string | null } {
+  // Hoisted so all three branches (normal spawn, isResume, isDirectResume)
+  // can pass it to injectMcpConfigIfNeeded — resume paths previously had no
+  // access to this directory at all (T9, Sprint 7.1).
+  const promptDir = join(process.cwd(), '.maestro-prompts');
+
   if (isDirectResume) {
     logger.info(`Direct resume conversation ${params.resumeConversationId} as new session ${sessionId}`);
     const directResumeArgs = ['--resume', params.resumeConversationId!];
@@ -166,34 +263,41 @@ export function buildClaudeArgs(
     // always passes agentId: ''. Falling back to it silently dropped ARS for
     // resumed academic-publication sessions. Prefer params.agentId only when
     // it is actually non-empty; otherwise look up the original agent via
-    // lookupOriginalAgentIdByConversation (placeholder values NULL/''/'(resumed)'
-    // excluded there — MN-9: this used to say "the string 'null'", which the
-    // SQL never actually checked for; the SQL checks `IS NULL`).
+    // lookupOriginalAgentByConversation (placeholder values NULL/''/'(resumed)'
+    // excluded there).
     const directAgentId = params.agentId && params.agentId.trim() !== '' ? params.agentId : null;
-    let directResumeDepartment: string | undefined;
-    if (directAgentId) {
-      directResumeDepartment = agentLoader.getAgent(directAgentId)?.department;
-    } else {
-      const originalAgentId = lookupOriginalAgentIdByConversation(params.resumeConversationId);
-      if (originalAgentId) {
-        directResumeDepartment = agentLoader.getAgent(originalAgentId)?.department;
+    let directResumeEffectiveAgentId: string | null = directAgentId;
+    let directResumeProjectId: string | null = null;
+    if (!directAgentId) {
+      const original = lookupOriginalAgentByConversation(params.resumeConversationId);
+      if (original) {
+        directResumeEffectiveAgentId = original.agentId;
+        directResumeProjectId = original.projectId;
       }
     }
+    const directResumeDepartment = directResumeEffectiveAgentId
+      ? agentLoader.getAgent(directResumeEffectiveAgentId)?.department
+      : undefined;
     injectArsPluginDirIfNeeded(directResumeArgs, directResumeDepartment, interactive);
+    // T9 (Sprint 7.1, PM-016): re-inject --mcp-config on resume — see
+    // injectMcpConfigIfNeeded's docstring for why this was missing before.
+    injectMcpConfigIfNeeded(directResumeArgs, directResumeEffectiveAgentId, directResumeProjectId, sessionId, promptDir);
     return { args: directResumeArgs, tmpFile: null };
   }
 
   if (isResume) {
     let claudeConvId: string | null = null;
     let resumeAgentId: string | null = null;
+    let resumeProjectId: string | null = null;
     try {
       const rows = database.prepare(
-        'SELECT claude_conversation_id, agent_id FROM claude_sessions WHERE id = ?',
+        'SELECT claude_conversation_id, agent_id, project_id FROM claude_sessions WHERE id = ?',
         [params.resumeSessionId],
       );
       if (rows.length > 0) {
         claudeConvId = rows[0].claude_conversation_id;
         resumeAgentId = rows[0].agent_id;
+        resumeProjectId = rows[0].project_id ?? null;
       }
     } catch (err) {
       logger.warn('Failed to look up claude_conversation_id', err);
@@ -205,16 +309,24 @@ export function buildClaudeArgs(
     const resumeArgs = ['--resume', claudeConvId];
     // MN-8 (G2 review round 2): a session row created by an earlier direct
     // resume always has agent_id = '(resumed)' (session-manager.ts, direct
-    // resume insert) — not a usable department lookup key. When the row we
-    // just read has no real agent_id, fall back to the same
+    // resume insert) — not a usable department/MCP lookup key. When the row
+    // we just read has no real agent_id, fall back to the same
     // conversation-id reverse lookup direct resume uses, so resuming a
-    // session that itself came from a direct resume doesn't silently drop ARS.
-    const resumeEffectiveAgentId =
-      resumeAgentId && resumeAgentId !== '(resumed)'
-        ? resumeAgentId
-        : lookupOriginalAgentIdByConversation(claudeConvId);
+    // session that itself came from a direct resume doesn't silently drop
+    // ARS or --mcp-config.
+    let resumeEffectiveAgentId: string | null = resumeAgentId && resumeAgentId !== '(resumed)' ? resumeAgentId : null;
+    let resumeEffectiveProjectId: string | null = resumeProjectId;
+    if (!resumeEffectiveAgentId) {
+      const original = lookupOriginalAgentByConversation(claudeConvId);
+      if (original) {
+        resumeEffectiveAgentId = original.agentId;
+        resumeEffectiveProjectId = original.projectId;
+      }
+    }
     const resumeAgent = resumeEffectiveAgentId ? agentLoader.getAgent(resumeEffectiveAgentId) : undefined;
     injectArsPluginDirIfNeeded(resumeArgs, resumeAgent?.department, interactive);
+    // T9 (Sprint 7.1, PM-016): re-inject --mcp-config on resume.
+    injectMcpConfigIfNeeded(resumeArgs, resumeEffectiveAgentId, resumeEffectiveProjectId, sessionId, promptDir);
     return { args: resumeArgs, tmpFile: null };
   }
 
@@ -230,7 +342,6 @@ export function buildClaudeArgs(
     taskId: params.taskId || undefined,
     projectId: params.projectId || undefined,
   });
-  const promptDir = join(process.cwd(), '.maestro-prompts');
   if (!existsSync(promptDir)) mkdirSync(promptDir, { recursive: true });
   const tmpFile = join(promptDir, `prompt-${sessionId.slice(0, 8)}.md`);
   writeFileSync(tmpFile, systemPrompt, 'utf-8');
@@ -322,57 +433,12 @@ export function buildClaudeArgs(
   }
 
   // ── MCP inter-agent communication injection ──────────────────────────────
-  // Inject --mcp-config so Claude Code CLI exposes SendMessage / ListInbox tools.
-  // Only for normal (non-resume) spawns — resume sessions inherit the original
-  // session's MCP config automatically.
-  try {
-    const agentDef = agentLoader.getAgent(params.agentId);
-    if (agentDef) {
-      const allowedTargets = [
-        ...(agentDef.manages ?? []),
-        ...(agentDef.reportsTo ? [agentDef.reportsTo] : []),
-        ...(agentDef.coordinatesWith ?? []),
-      ];
-
-      const mcpAgentConfig: AgentMcpConfig = {
-        agentId: params.agentId,
-        allowedTargets,
-        inboxDir: join(homedir(), '.claude', 'teams', 'default', 'inboxes'),
-        projectId: params.projectId || null,
-        rateLimit: 20,
-      };
-
-      const mcpAgentConfigPath = join(promptDir, `mcp-agent-config-${sessionId.slice(0, 8)}.json`);
-      writeFileSync(mcpAgentConfigPath, JSON.stringify(mcpAgentConfig, null, 2), 'utf-8');
-
-      const serverScriptPath = getMcpServerPath();
-      if (existsSync(serverScriptPath)) {
-        const mcpServersConfig: McpServerConfig = {
-          mcpServers: {
-            'send-message': {
-              command: 'node',
-              args: [serverScriptPath, mcpAgentConfigPath],
-              type: 'stdio',
-            },
-          },
-        };
-        const mcpServersConfigPath = join(promptDir, `mcp-servers-${sessionId.slice(0, 8)}.json`);
-        writeFileSync(mcpServersConfigPath, JSON.stringify(mcpServersConfig), 'utf-8');
-        args.push('--mcp-config', mcpServersConfigPath);
-        logger.info(
-          `Session ${sessionId} MCP server injected` +
-            ` (${params.agentId} → ${allowedTargets.length} targets: ${allowedTargets.join(', ')})`,
-        );
-      } else {
-        logger.warn(
-          `MCP server script not found at ${serverScriptPath}, SendMessage unavailable for session ${sessionId}`,
-        );
-      }
-    }
-  } catch (err) {
-    // MCP injection failure must not block session spawn (graceful degradation)
-    logger.warn(`Failed to inject MCP config for session ${sessionId}: ${err}`);
-  }
+  // Inject --mcp-config so Claude Code CLI exposes SendMessage / ListInbox
+  // tools. T9 (Sprint 7.1, PM-016): shared with both resume paths via
+  // injectMcpConfigIfNeeded — resume does NOT inherit the original session's
+  // MCP config automatically (Claude Code's `--resume` only restores the
+  // conversation transcript, not the original invocation's CLI flags).
+  injectMcpConfigIfNeeded(args, params.agentId, params.projectId, sessionId, promptDir);
 
   // ── ARS plugin-dir injection (Sprint 7) ───────────────────────────────────
   // Validation already happened at the top of this branch (before any file

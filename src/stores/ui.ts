@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import { useIpc } from '../composables/useIpc';
+import { i18n } from '../plugins/i18n';
+import { buildAppNotificationToast, isValidAppNotification } from '../utils/app-notification';
 
 export type Theme = 'dark' | 'light';
 export type SessionGroupMode = 'none' | 'project' | 'department';
@@ -84,6 +87,31 @@ export const useUiStore = defineStore('ui', () => {
     localStorage.setItem('maestro-session-group', mode);
   }
 
+  // Guarded inside the store's setup() closure (mirrors `tasks.ts`'s
+  // `initSyncListener`), which Pinia runs exactly once per store instance —
+  // so calling `setupNotificationListener()` more than once (e.g. App.vue
+  // remounting) never registers the IPC listener twice.
+  let notificationListenerRegistered = false;
+
+  /** Subscribes once to the existing `notification` IPC channel
+   * (api-design §7.3) and turns each payload into a toast. Malformed
+   * payloads (not an object, or missing `message`) are dropped with a
+   * `console.warn` — they must never crash the renderer. */
+  function setupNotificationListener() {
+    if (notificationListenerRegistered) return;
+    notificationListenerRegistered = true;
+
+    const { onNotification } = useIpc();
+    onNotification((data: unknown) => {
+      if (!isValidAppNotification(data)) {
+        console.warn('Ignoring malformed app notification payload', data);
+        return;
+      }
+      const { title, message, type } = buildAppNotificationToast(data, i18n.global.t);
+      addToast(message, type, title);
+    });
+  }
+
   return {
     activeSessions,
     theme,
@@ -100,5 +128,6 @@ export const useUiStore = defineStore('ui', () => {
     getScrollPosition,
     sessionGroupMode,
     setSessionGroupMode,
+    setupNotificationListener,
   };
 });

@@ -6,3 +6,4 @@ export * from './project';
 export * from './gate';
 export * from './git';
 export * from './mcp';
+export * from './notification';

@@ -59,6 +59,7 @@ onMounted(async () => {
   // Setup real-time listeners
   sessionsStore.setupListeners();
   messagesStore.setupListeners();
+  uiStore.setupNotificationListener();
 
   // Re-fetch stores when FileWatcher detects .tasks/ or dev-plan changes
   // Note: tasks store has its own sync listener, so we only handle gates + stats here

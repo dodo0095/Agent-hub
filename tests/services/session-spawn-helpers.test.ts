@@ -614,3 +614,198 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
     expect(thrown?.message).toContain('database is locked');
   });
 });
+
+// ─── buildClaudeArgs — MCP config re-injection on resume (Sprint 7.1 T9, PM-016) ─
+
+describe('buildClaudeArgs — MCP config injection', () => {
+  /** Path-aware existsSync: only the MCP send-message server script "exists". */
+  function setupMcpServerScript(exists: boolean) {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (typeof p !== 'string') return false;
+      return exists && p.includes('send-message-server.js');
+    });
+  }
+
+  /** SQL-aware DB mock (PM-012), scoped to this describe's needs. */
+  function configureDb(opts: {
+    resumeSession?: { id: string; claude_conversation_id: string; agent_id: string | null };
+    directResumeConv?: { convId: string; agentId: string | null };
+  }) {
+    mockDbPrepare.mockImplementation((sql: string, params?: unknown[]) => {
+      if (/FROM claude_sessions\s+WHERE id = \?/i.test(sql)) {
+        const id = params?.[0];
+        if (opts.resumeSession && opts.resumeSession.id === id) {
+          return [{
+            claude_conversation_id: opts.resumeSession.claude_conversation_id,
+            agent_id: opts.resumeSession.agent_id,
+          }];
+        }
+        return [];
+      }
+      if (/FROM claude_sessions\s+WHERE claude_conversation_id = \?/i.test(sql)) {
+        const convId = params?.[0];
+        if (opts.directResumeConv && opts.directResumeConv.convId === convId && opts.directResumeConv.agentId) {
+          return [{ agent_id: opts.directResumeConv.agentId }];
+        }
+        return [];
+      }
+      return [];
+    });
+  }
+
+  /** Find the JSON body written to the mcp-agent-config-*.json temp file. */
+  function findMcpAgentConfigWrite(): Record<string, unknown> | undefined {
+    const call = mockWriteFileSync.mock.calls.find(([path]) => String(path).includes('mcp-agent-config'));
+    return call ? JSON.parse(call[1] as string) : undefined;
+  }
+
+  const engineeringAgent = {
+    department: 'engineering',
+    manages: ['downstream-agent'],
+    reportsTo: 'lead-agent',
+    coordinatesWith: ['peer-agent'],
+  };
+
+  beforeEach(() => {
+    mockExistsSync.mockReset();
+    mockExistsSync.mockReturnValue(false);
+    mockReadFileSync.mockReset();
+    mockWriteFileSync.mockReset();
+    mockStatSync.mockReset();
+    mockStatSync.mockReturnValue(undefined);
+    mockDbPrepare.mockReset();
+    mockDbPrepare.mockImplementation(() => []);
+    mockGetAgent.mockReset();
+    mockGetAgent.mockImplementation(() => undefined);
+    mockLoggerInfo.mockReset();
+    mockLoggerWarn.mockReset();
+    (promptAssembler.assemble as ReturnType<typeof vi.fn>).mockClear();
+  });
+
+  it('normal spawn still injects --mcp-config with params.agentId (no regression from the T9 refactor)', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+    setupMcpServerScript(true);
+
+    const params: SpawnParams = { agentId: 'backend-architect', task: 'build the api', projectId: 'proj-1' };
+    const { args } = buildClaudeArgs(params, 'sess-mcp-normal', 'sonnet', 10, true, false, false);
+
+    expect(args).toContain('--mcp-config');
+    const written = findMcpAgentConfigWrite();
+    expect(written?.agentId).toBe('backend-architect');
+    expect(written?.allowedTargets).toEqual(['downstream-agent', 'lead-agent', 'peer-agent']);
+    expect(written?.projectId).toBe('proj-1');
+  });
+
+  it('T9: isResume injects --mcp-config with agentId set to the reverse-looked-up original agent', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+    configureDb({
+      resumeSession: { id: 'sess-orig', claude_conversation_id: 'conv-mcp-resume', agent_id: 'backend-architect' },
+    });
+    setupMcpServerScript(true);
+
+    const params: SpawnParams = { agentId: 'whatever', task: '', resumeSessionId: 'sess-orig', projectId: null };
+    const { args } = buildClaudeArgs(params, 'sess-mcp-resume', 'sonnet', 10, true, true, false);
+
+    expect(args[0]).toBe('--resume');
+    expect(args[1]).toBe('conv-mcp-resume');
+    expect(args).toContain('--mcp-config');
+    const written = findMcpAgentConfigWrite();
+    expect(written?.agentId).toBe('backend-architect'); // the ORIGINAL agent, not params.agentId
+  });
+
+  it('T9: isDirectResume injects --mcp-config with agentId set to the reverse-looked-up original agent', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+    configureDb({
+      directResumeConv: { convId: 'conv-mcp-direct', agentId: 'backend-architect' },
+    });
+    setupMcpServerScript(true);
+
+    const params: SpawnParams = {
+      agentId: '', // exactly what src/stores/sessions.ts resumeByConversationId passes
+      task: '',
+      resumeConversationId: 'conv-mcp-direct',
+      projectPath: 'C:/some/project',
+    };
+    const { args } = buildClaudeArgs(params, 'sess-mcp-direct', 'sonnet', 10, true, false, true);
+
+    expect(args).toEqual(['--resume', 'conv-mcp-direct', '--mcp-config', expect.stringContaining('mcp-servers')]);
+    const written = findMcpAgentConfigWrite();
+    expect(written?.agentId).toBe('backend-architect');
+  });
+
+  it('T9: isResume does not add --mcp-config when no valid agent can be resolved', () => {
+    configureDb({
+      resumeSession: { id: 'sess-orig-unknown', claude_conversation_id: 'conv-mcp-unknown', agent_id: null },
+    });
+    setupMcpServerScript(true); // script exists, but there's no agent to build a config for
+
+    const params: SpawnParams = {
+      agentId: 'whatever',
+      task: '',
+      resumeSessionId: 'sess-orig-unknown',
+      projectId: null,
+    };
+    const { args } = buildClaudeArgs(params, 'sess-mcp-resume-unknown', 'sonnet', 10, true, true, false);
+
+    expect(args).toEqual(['--resume', 'conv-mcp-unknown']);
+    expect(args).not.toContain('--mcp-config');
+    expect(findMcpAgentConfigWrite()).toBeUndefined();
+  });
+
+  it('T9: isDirectResume does not add --mcp-config when no valid agent can be resolved', () => {
+    configureDb({}); // no matching row anywhere
+    setupMcpServerScript(true);
+
+    const params: SpawnParams = {
+      agentId: '',
+      task: '',
+      resumeConversationId: 'conv-mcp-direct-unknown',
+      projectPath: 'C:/some/project',
+    };
+    const { args } = buildClaudeArgs(params, 'sess-mcp-direct-unknown', 'sonnet', 10, true, false, true);
+
+    expect(args).toEqual(['--resume', 'conv-mcp-direct-unknown']);
+    expect(args).not.toContain('--mcp-config');
+  });
+
+  it('T9: a generation failure during isResume does not throw and does not block --resume', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+    configureDb({
+      resumeSession: { id: 'sess-orig-fail', claude_conversation_id: 'conv-mcp-fail', agent_id: 'backend-architect' },
+    });
+    mockWriteFileSync.mockImplementation(() => {
+      throw new Error('EACCES: cannot write mcp-agent-config');
+    });
+
+    const params: SpawnParams = { agentId: 'whatever', task: '', resumeSessionId: 'sess-orig-fail', projectId: null };
+    let result: ReturnType<typeof buildClaudeArgs> | undefined;
+    expect(() => {
+      result = buildClaudeArgs(params, 'sess-mcp-fail', 'sonnet', 10, true, true, false);
+    }).not.toThrow();
+
+    expect(result!.args).toEqual(['--resume', 'conv-mcp-fail']); // --resume itself must go through
+    expect(mockLoggerWarn).toHaveBeenCalled();
+  });
+
+  it('T9: a generation failure during isDirectResume does not throw and does not block --resume', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+    configureDb({ directResumeConv: { convId: 'conv-mcp-direct-fail', agentId: 'backend-architect' } });
+    mockWriteFileSync.mockImplementation(() => {
+      throw new Error('EACCES: cannot write mcp-agent-config');
+    });
+
+    const params: SpawnParams = {
+      agentId: '',
+      task: '',
+      resumeConversationId: 'conv-mcp-direct-fail',
+      projectPath: 'C:/some/project',
+    };
+    let result: ReturnType<typeof buildClaudeArgs> | undefined;
+    expect(() => {
+      result = buildClaudeArgs(params, 'sess-mcp-direct-fail', 'sonnet', 10, true, false, true);
+    }).not.toThrow();
+
+    expect(result!.args).toEqual(['--resume', 'conv-mcp-direct-fail']);
+    expect(mockLoggerWarn).toHaveBeenCalled();
+  });
+});

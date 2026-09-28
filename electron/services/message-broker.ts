@@ -19,7 +19,7 @@ import { database } from './database';
 import { eventBus } from './event-bus';
 import { logger } from '../utils/logger';
 import { ptyWriteAndSubmit } from './pty-manager';
-import type { MessageRecord, SendMessageParams, MessageFilters, MessageStatus } from '../types';
+import type { MessageRecord, SendMessageParams, MessageFilters, MessageStatus, AppNotification } from '../types';
 
 /** Minimal session view needed by the broker (avoids circular dep with SessionManager). */
 export interface BrokerSessionView {
@@ -43,9 +43,17 @@ export interface BrokerCallbacks {
 const SPAWN_COOLDOWN_MS = 60_000; // 1 minute window
 const MAX_SPAWNS_PER_WINDOW = 3;
 
+// Sprint 7.1 T10 (PM-016 follow-up, api-design §7.2): ARS_* auto-spawn
+// failures are config errors — retrying every poll/deliver cycle can't fix
+// them, so the target agent gets a 5-minute cooldown instead of hammering
+// spawnSession forever.
+const ARS_FAILURE_COOLDOWN_MS = 5 * 60_000;
+
 class MessageBroker {
   private callbacks: BrokerCallbacks | null = null;
   private spawnHistory: Map<string, number[]> = new Map(); // agentId → timestamps
+  /** agentId → { code, until } — set on an ARS_* auto-spawn failure, cleared once `until` passes. */
+  private arsFailureCooldown: Map<string, { code: string; until: number }> = new Map();
 
   /**
    * Register callbacks from SessionManager (called once at startup).
@@ -176,7 +184,18 @@ class MessageBroker {
             msg.read = true;
             logger.info(`InboxPoller: auto-spawned session ${sessionId} for ${agentId}`);
           } catch (err) {
-            logger.warn(`InboxPoller: auto-spawn failed for ${agentId}`, err);
+            const errMessage = err instanceof Error ? err.message : String(err);
+            if (errMessage.startsWith('ARS_')) {
+              this.handleArsAutoSpawnFailure(agentId, msg.from, msg.project || null, content, err);
+              // Keep the message unread/unprocessed so it's retried once the
+              // cooldown clears (mirrors the rate-limit branch below).
+              seen.delete(key);
+              dirty = false;
+            } else {
+              // T10: non-ARS auto-spawn failures keep the exact pre-T10
+              // behaviour — just log and move on, next poll retries as before.
+              logger.warn(`InboxPoller: auto-spawn failed for ${agentId}`, err);
+            }
           }
         } else {
           // Rate limit reached, message stays unread for next poll
@@ -281,8 +300,14 @@ class MessageBroker {
           }
           return;
         } catch (err) {
-          logger.warn(`MessageBroker: auto-spawn failed for ${message.toAgent}`, err);
-          return; // Message stays pending, will be retried on next deliverPending call
+          const errMessage = err instanceof Error ? err.message : String(err);
+          if (errMessage.startsWith('ARS_')) {
+            this.handleArsAutoSpawnFailure(message.toAgent, message.fromAgent, message.projectId, message.content, err);
+          } else {
+            // T10: non-ARS auto-spawn failures keep the exact pre-T10 behaviour.
+            logger.warn(`MessageBroker: auto-spawn failed for ${message.toAgent}`, err);
+          }
+          return; // Message stays pending (markDelivered was never called), retried on next deliverPending call
         }
       } else {
         logger.info(`Message ${message.id}: no active session for ${message.toAgent}, rate limit reached — stays pending`);
@@ -401,6 +426,12 @@ class MessageBroker {
   // ─── Rate limiting ─────────────────────────────────────────────────────────
 
   private canAutoSpawn(agentId: string): boolean {
+    // T10: an ARS_* auto-spawn failure cools this agent down for 5 minutes —
+    // both auto-spawn call sites (InboxPoller, tryDeliver) gate on this
+    // method, so this single check blocks further attempts from either path.
+    const cooldown = this.arsFailureCooldown.get(agentId);
+    if (cooldown && cooldown.until > Date.now()) return false;
+
     const now = Date.now();
     const history = this.spawnHistory.get(agentId) || [];
     // Prune old entries
@@ -413,6 +444,77 @@ class MessageBroker {
     const history = this.spawnHistory.get(agentId) || [];
     history.push(Date.now());
     this.spawnHistory.set(agentId, history);
+  }
+
+  // ─── Auto-spawn failure reporting (Sprint 7.1 T10, api-design §7.2) ────────
+
+  /**
+   * Handle an auto-spawn failure whose error message is an `ARS_*` code —
+   * a configuration problem (missing/incomplete ARS install, non-interactive
+   * spawn attempt) that retrying will never fix on its own. Shared by both
+   * auto-spawn call sites (InboxPoller, `tryDeliver`):
+   *
+   * 1. Puts `targetAgent` into a 5-minute cooldown (`canAutoSpawn` above
+   *    checks this) so the same failure doesn't get retried every poll.
+   * 2. Dedup: only sends the "tell the boss" reply + UI notification once
+   *    per target agent + error code within that cooldown window. In
+   *    practice `canAutoSpawn` already prevents a second `spawnSession`
+   *    attempt (and therefore a second call to this method) for the same
+   *    agent while its cooldown is active, but this check is kept as an
+   *    explicit belt-and-suspenders guard matching the spec wording, and to
+   *    protect against a future async `spawnSession` implementation.
+   * 3. Replies to the ORIGINAL sender (`fromAgent`) as `'system'` — unless
+   *    `fromAgent` is itself `'system'`, which would create a reply loop
+   *    (a system notification about a system notification's own auto-spawn
+   *    failure, forever).
+   * 4. Emits `app:notification` for the UI toast (main.ts forwards it to
+   *    the renderer over the existing `notification` IPC channel).
+   */
+  private handleArsAutoSpawnFailure(
+    targetAgent: string,
+    fromAgent: string,
+    projectId: string | null,
+    originalContent: string,
+    err: unknown,
+  ): void {
+    const message = err instanceof Error ? err.message : String(err);
+    const code = message.split(':')[0].trim();
+    const now = Date.now();
+
+    const existing = this.arsFailureCooldown.get(targetAgent);
+    const alreadyNotified = !!existing && existing.code === code && existing.until > now;
+
+    this.arsFailureCooldown.set(targetAgent, { code, until: now + ARS_FAILURE_COOLDOWN_MS });
+
+    logger.warn(
+      `MessageBroker: auto-spawn failed for ${targetAgent} (${code}) — cooling down ${ARS_FAILURE_COOLDOWN_MS / 60_000}min`,
+      err,
+    );
+
+    if (alreadyNotified) return;
+
+    // Anti-loop: never reply to a message that already came from 'system'.
+    if (fromAgent !== 'system') {
+      this.send({
+        fromAgent: 'system',
+        toAgent: fromAgent,
+        content:
+          `無法自動啟動 ${targetAgent}：${code}\n\n` +
+          `錯誤訊息：${message}\n\n` +
+          `原訊息：${originalContent}\n\n` +
+          '請告知老闆到「設定 → 學術出版部」處理。',
+        projectId: projectId || undefined,
+      });
+    }
+
+    const notification: AppNotification = {
+      level: 'error',
+      code,
+      message,
+      source: 'message-broker',
+      agentId: targetAgent,
+    };
+    eventBus.emit('app:notification', notification);
   }
 
   // ─── Query ─────────────────────────────────────────────────────────────────
