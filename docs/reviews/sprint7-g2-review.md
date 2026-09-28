@@ -523,3 +523,37 @@ $ grep -rn "interactive: false" src electron   → 除了 spawn helper 之外沒
 - 四個 GUI 入口的 toast 在真實 Hub 裡的畫面：沒有截圖，也沒有點擊。
 - 主 clone 裡的 backlog 檔 `S7-resume-mcp-config-lost.md`：只用 `ls` 確認檔案存在，沒有開啟確認內容。
 - `preflight.cjs`、`npm run build`：本輪沒有執行。
+
+---
+
+## 第五輪（G4 複審）
+
+> 審查者：同一位獨立 reviewer
+> 日期：2026-09-28
+> 範圍：`git diff f130d0f..e56c65b`（只有文件：README、postmortem-log、dev-plan、T7 證據，以及本報告第四輪節）
+> **G4 最終判定：✅ 通過**（🔴 0 / 🟠 0 / 🟡 0 未修）
+
+| # | 結果 | 證據 |
+|---|:--:|------|
+| MJ-4 | ✅ 已修 | `README.md:276` 改寫為三件事：「一律拒絕啟動」（程式碼成立，擋在任何寫檔之前）；「從 GUI 啟動或接續時畫面會跳出錯誤提示」（四個入口都已接上 `notifySpawnError`）；「⚠️ 由總監訊息自動啟動時，失敗只記在 log、畫面不提示（backlog S7-MN1）」。最後一點我對照了 `message-broker.ts:166-179` 和 `:268-285`：兩條 auto-spawn 路徑在 catch 裡都只有 `logger.warn`；全檔只 emit `message:created`／`message:delivered`／`message:read` 三種事件（`:240, :350, :359`），沒有任何通往畫面的失敗通知。另外 auto-spawn 固定帶 `interactive: true`（`session-manager.ts:111`），所以這條路徑只會遇到路徑未設定或安裝不完整兩種錯誤，README 的敘述也沒有超出這個範圍。README 另外寫了「操作員沒有動靜就先去設定頁檢查」的處置建議，和現況相符 |
+| MN-12 | ✅ 已修 | PM-015 狀態改為 resolved，並寫明解法依據（`postmortem-log.md:353`）；主 clone 的 backlog `PM-015-ars-skills-symlink-check.md` 狀態是 `done`。dev-plan §9 五個勾選框都已勾，§10 的 T3–T8 和 Review 紀錄也已回填，內容和 commit 歷程、各輪 review 一致。Gate 列依協調者說明刻意留白（決策屬於老闆），不算缺漏 |
+| MN-13 | ✅ 已修 | 快速參考表新增 PM-016 那一行（`postmortem-log.md:48`），並涵蓋 `--plugin-dir` 和 `--mcp-config` 兩種參數 |
+| MN-14 | ✅ 已修 | T7 證據第 5 項標題改成「✅（原判 ⚠️，已修正）」，附上修正的 commit 和仍存在的限制（auto-spawn 只記 log、GUI 沒有截圖）；原始追蹤紀錄保留，稽核軌跡完整 |
+
+補充觀察（不列入問題）：
+- dev-plan 的 Review 紀錄把「測試 Review」連到 T7 證據，而那份證據的 GUI 畫面仍然沒有截圖。T7 那一列已經自己標註「未驗證」，沒有隱瞞。
+- 本輪沒有程式碼變更，所以沒有重跑 vitest、lint、typecheck；最後一次全綠是第四輪在 f130d0f 的結果（437/437）。
+
+### 第五輪判定
+
+**G4 最終判定：✅ 通過**。Sprint 7 的 G2（第四輪）和 G4（本輪）都已通過，可以交給老闆做 Gate 決策。
+
+仍然開著、但不擋 Gate 的項目：
+- MN-1（backlog S7-MN1）
+- PM-016（backlog `S7-resume-mcp-config-lost.md`）
+- GUI 畫面截圖（T7 未驗證項）
+
+### 第五輪未驗證項目
+
+- 本輪沒有重跑測試（純文件變更）。
+- 審查當下 worktree 短暫出現一個未追蹤的 `electron.vite.config.1790580363080.mjs`（electron-vite build 的暫存檔），寫完本節時已自動消失，不在本輪範圍。

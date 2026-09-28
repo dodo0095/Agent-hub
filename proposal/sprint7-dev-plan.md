@@ -236,7 +236,7 @@ T7 為真實 Hub 啟動驗證（非自動化），證據存 `docs/reviews/sprint
 | 規範 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-g2-review.md`（第一輪對規範項） |
 | 實作 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-g2-review.md`（四輪；最終 0 Blocker／0 Major） |
 | 測試 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-t7-evidence.md`；全套 437/437 |
-| 文件 Review | 2026-09-28 | 待複審 | 第四輪 G4 退回 MJ-4、MN-12～14，已修正待複審 |
+| 文件 Review | 2026-09-28 | 通過 | 第五輪 G4 複審 0 Blocker／0 Major／0 未修 Minor（`docs/reviews/sprint7-g2-review.md`） |
 
 ### Gate 紀錄
 
