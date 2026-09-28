@@ -240,6 +240,17 @@ function getMcpServerPath(): string {
 /**
  * Build the array of CLI arguments to pass to Claude Code.
  * Also writes the system-prompt temp file when needed, returning its path.
+ *
+ * `resolvedAgentId` (G2 review, Sprint 7.1 round 2 — identity mismatch):
+ * the agent identity actually used to build --plugin-dir / --mcp-config for
+ * THIS invocation — `params.agentId` for a normal spawn, the reverse-looked-
+ * up original agent for either resume path, or `null` when no agent could
+ * be resolved at all. session-manager.ts uses this (in preference to its
+ * own `'(resumed)'` placeholder) to record `claude_sessions.agent_id`, so
+ * that a resumed session that IS communicating as agent X over MCP is also
+ * findable as agent X by `findActiveByAgent` — otherwise MessageBroker can't
+ * find the resumed session when routing a reply back to it and ends up
+ * auto-spawning a duplicate.
  */
 export function buildClaudeArgs(
   params: SpawnParams,
@@ -249,7 +260,7 @@ export function buildClaudeArgs(
   interactive: boolean,
   isResume: boolean,
   isDirectResume: boolean,
-): { args: string[]; tmpFile: string | null } {
+): { args: string[]; tmpFile: string | null; resolvedAgentId: string | null } {
   // Hoisted so all three branches (normal spawn, isResume, isDirectResume)
   // can pass it to injectMcpConfigIfNeeded — resume paths previously had no
   // access to this directory at all (T9, Sprint 7.1).
@@ -282,7 +293,7 @@ export function buildClaudeArgs(
     // T9 (Sprint 7.1, PM-016): re-inject --mcp-config on resume — see
     // injectMcpConfigIfNeeded's docstring for why this was missing before.
     injectMcpConfigIfNeeded(directResumeArgs, directResumeEffectiveAgentId, directResumeProjectId, sessionId, promptDir);
-    return { args: directResumeArgs, tmpFile: null };
+    return { args: directResumeArgs, tmpFile: null, resolvedAgentId: directResumeEffectiveAgentId };
   }
 
   if (isResume) {
@@ -327,7 +338,7 @@ export function buildClaudeArgs(
     injectArsPluginDirIfNeeded(resumeArgs, resumeAgent?.department, interactive);
     // T9 (Sprint 7.1, PM-016): re-inject --mcp-config on resume.
     injectMcpConfigIfNeeded(resumeArgs, resumeEffectiveAgentId, resumeEffectiveProjectId, sessionId, promptDir);
-    return { args: resumeArgs, tmpFile: null };
+    return { args: resumeArgs, tmpFile: null, resolvedAgentId: resumeEffectiveAgentId };
   }
 
   // Normal spawn: resolve/validate ARS plugin-dir FIRST — before any file is
@@ -447,7 +458,7 @@ export function buildClaudeArgs(
     args.push('--plugin-dir', arsPluginDir);
   }
 
-  return { args, tmpFile };
+  return { args, tmpFile, resolvedAgentId: params.agentId };
 }
 
 // ─── Resume info lookup ───────────────────────────────────────────────────────

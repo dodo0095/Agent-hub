@@ -808,4 +808,70 @@ describe('buildClaudeArgs — MCP config injection', () => {
     expect(result!.args).toEqual(['--resume', 'conv-mcp-direct-fail']);
     expect(mockLoggerWarn).toHaveBeenCalled();
   });
+
+  // ─── resolvedAgentId (G2 review round 2, identity mismatch) ────────────────
+  // session-manager.ts uses this to record claude_sessions.agent_id instead
+  // of its own '(resumed)' placeholder, so a resumed session that IS
+  // communicating as agent X over MCP is also findable as agent X.
+
+  it('resolvedAgentId: normal spawn returns params.agentId', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+
+    const params: SpawnParams = { agentId: 'backend-architect', task: 'x', projectId: null };
+    const { resolvedAgentId } = buildClaudeArgs(params, 'sess-resolved-normal', 'sonnet', 10, true, false, false);
+
+    expect(resolvedAgentId).toBe('backend-architect');
+  });
+
+  it('resolvedAgentId: isResume returns the reverse-looked-up original agent', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+    configureDb({
+      resumeSession: { id: 'sess-orig', claude_conversation_id: 'conv-resolved-resume', agent_id: 'backend-architect' },
+    });
+
+    const params: SpawnParams = { agentId: 'whatever', task: '', resumeSessionId: 'sess-orig', projectId: null };
+    const { resolvedAgentId } = buildClaudeArgs(params, 'sess-resolved-resume', 'sonnet', 10, true, true, false);
+
+    expect(resolvedAgentId).toBe('backend-architect');
+  });
+
+  it('resolvedAgentId: isDirectResume returns the reverse-looked-up original agent', () => {
+    mockGetAgent.mockImplementation((id: string) => (id === 'backend-architect' ? engineeringAgent : undefined));
+    configureDb({ directResumeConv: { convId: 'conv-resolved-direct', agentId: 'backend-architect' } });
+
+    const params: SpawnParams = {
+      agentId: '',
+      task: '',
+      resumeConversationId: 'conv-resolved-direct',
+      projectPath: 'C:/some/project',
+    };
+    const { resolvedAgentId } = buildClaudeArgs(params, 'sess-resolved-direct', 'sonnet', 10, true, false, true);
+
+    expect(resolvedAgentId).toBe('backend-architect');
+  });
+
+  it('resolvedAgentId: null on isResume when the session row exists but no agent can be resolved', () => {
+    configureDb({
+      resumeSession: { id: 'sess-orig-unknown', claude_conversation_id: 'conv-resolved-unknown', agent_id: null },
+    });
+
+    const params: SpawnParams = { agentId: 'whatever', task: '', resumeSessionId: 'sess-orig-unknown', projectId: null };
+    const { resolvedAgentId } = buildClaudeArgs(params, 'sess-resolved-resume-unknown', 'sonnet', 10, true, true, false);
+
+    expect(resolvedAgentId).toBeNull();
+  });
+
+  it('resolvedAgentId: null on isDirectResume when no agent can be resolved', () => {
+    configureDb({}); // no matching rows anywhere
+
+    const params: SpawnParams = {
+      agentId: '',
+      task: '',
+      resumeConversationId: 'conv-resolved-direct-unknown',
+      projectPath: 'C:/some/project',
+    };
+    const { resolvedAgentId } = buildClaudeArgs(params, 'sess-resolved-direct-unknown', 'sonnet', 10, true, false, true);
+
+    expect(resolvedAgentId).toBeNull();
+  });
 });

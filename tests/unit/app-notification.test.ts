@@ -66,7 +66,25 @@ describe('buildAppNotificationToast', () => {
     expect(toast.message).not.toContain('尚未設定');
   });
 
-  it('ARS_INSTALL_INCOMPLETE: keeps the backend detail verbatim (dynamic missing-file list)', () => {
+  it('ARS_INSTALL_INCOMPLETE: strips the "CODE: " prefix message-broker.ts actually sends, keeping the missing-file list without duplicating the code (MN-B)', () => {
+    // Real shape from `handleArsAutoSpawnFailure` (electron/services/message-broker.ts:~513):
+    // `message` is `err.message` in full, i.e. still prefixed with the code —
+    // NOT just the detail. A fixture without the prefix would hide this bug.
+    const payload: AppNotificationPayload = {
+      level: 'error',
+      code: 'ARS_INSTALL_INCOMPLETE',
+      message: 'ARS_INSTALL_INCOMPLETE: 缺少 skills/deep-research/SKILL.md；若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone',
+      source: 'message-broker',
+    };
+    const toast = buildAppNotificationToast(payload, t);
+    expect(toast.title).toBe('ARS Installation Incomplete');
+    expect(toast.message).toBe(
+      '缺少 skills/deep-research/SKILL.md；若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone',
+    );
+    expect(toast.message).not.toContain('ARS_INSTALL_INCOMPLETE:');
+  });
+
+  it('ARS_INSTALL_INCOMPLETE: also handles a message with no code prefix (defensive fallback, e.g. a future emitter)', () => {
     const payload: AppNotificationPayload = {
       level: 'error',
       code: 'ARS_INSTALL_INCOMPLETE',
@@ -76,6 +94,21 @@ describe('buildAppNotificationToast', () => {
     const toast = buildAppNotificationToast(payload, t);
     expect(toast.title).toBe('ARS Installation Incomplete');
     expect(toast.message).toBe('缺少 skills/deep-research/SKILL.md');
+  });
+
+  it('ARS_INSTALL_INCOMPLETE: does not strip a mismatched code prefix (payload.code is the source of truth, message left untouched)', () => {
+    const payload: AppNotificationPayload = {
+      level: 'error',
+      code: 'ARS_INSTALL_INCOMPLETE',
+      // Prefix in the string doesn't match payload.code — shouldn't happen given
+      // how the backend derives `code` from the same string, but must not crash
+      // or silently swap in the wrong title/body.
+      message: 'ARS_PATH_NOT_SET: 尚未設定 ARS 路徑',
+      source: 'message-broker',
+    };
+    const toast = buildAppNotificationToast(payload, t);
+    expect(toast.title).toBe('ARS Installation Incomplete');
+    expect(toast.message).toBe('ARS_PATH_NOT_SET: 尚未設定 ARS 路徑');
   });
 
   it('non-ARS payload with a backend-provided title: uses it verbatim', () => {

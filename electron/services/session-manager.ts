@@ -232,7 +232,7 @@ class SessionManager {
     const now = new Date().toISOString();
 
     // Build CLI args + optional temp prompt file
-    const { args, tmpFile } = buildClaudeArgs(params, sessionId, model, maxTurns, interactive, isResume, isDirectResume);
+    const { args, tmpFile, resolvedAgentId } = buildClaudeArgs(params, sessionId, model, maxTurns, interactive, isResume, isDirectResume);
 
     logger.info(`Spawning session ${sessionId} for agent ${params.agentId}`, { model, maxTurns, isResume });
 
@@ -297,10 +297,27 @@ class SessionManager {
 
     const eventParser = new EventParser();
 
-    const agentId = isDirectResume ? (params.agentId || '(resumed)')
+    // G2 review (Sprint 7.1 round 2, identity mismatch): buildClaudeArgs has
+    // already resolved the REAL agent this session communicates as over MCP
+    // (--mcp-config is built from resolvedAgentId for both resume paths).
+    // Recording anything else here — params.agentId (always '' for direct
+    // resume) or resumeInfo.agent_id (can itself be the '(resumed)'
+    // placeholder written by an earlier direct resume) — would make this
+    // session unfindable by findActiveByAgent(realAgent): MessageBroker
+    // can't route a reply back to it and ends up auto-spawning a duplicate
+    // session for the same agent. Only fall back to the old placeholder
+    // logic when resolvedAgentId is null (agent genuinely could not be
+    // determined — same as pre-existing behaviour).
+    const resumeFallbackAgentId = isDirectResume ? (params.agentId || '(resumed)')
       : isResume ? (resumeInfo.agent_id || params.agentId) : params.agentId;
-    const agentName = isDirectResume ? (params.agentId || '(resumed)')
+    const agentId = (isResume || isDirectResume) ? (resolvedAgentId || resumeFallbackAgentId) : params.agentId;
+
+    const resolvedAgentDef = (isResume || isDirectResume) && resolvedAgentId ? agentLoader.getById(resolvedAgentId) : null;
+    const resumeFallbackAgentName = isDirectResume ? (params.agentId || '(resumed)')
       : isResume ? (resumeInfo.agent_id || params.agentId) : (agent?.name || params.agentId);
+    const agentName = (isResume || isDirectResume)
+      ? (resolvedAgentDef?.name || resumeFallbackAgentName)
+      : (agent?.name || params.agentId);
     const taskText = isDirectResume ? (params.task || '(resumed)')
       : isResume ? (resumeInfo.task || '(resumed)') : params.task;
 

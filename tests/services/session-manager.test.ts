@@ -144,6 +144,7 @@ const mockDb = database as {
 };
 const mockAgentLoader = agentLoader as {
   getById: ReturnType<typeof vi.fn>;
+  getAgent: ReturnType<typeof vi.fn>;
 };
 const mockExecSync = execSync as ReturnType<typeof vi.fn>;
 
@@ -375,6 +376,45 @@ describe('SessionManager', () => {
       expect(result).toHaveProperty('sessionId');
       expect(mockPty.spawn).toHaveBeenCalledTimes(1);
     });
+
+    it('G2 review round 2 (identity mismatch): when the resumed row itself has the "(resumed)" placeholder agent_id (chained resume), resolves the ORIGINAL agent via conversation-id reverse-lookup and records that — not "(resumed)" — as session.agentId', () => {
+      // This models resuming a session that was itself created by an earlier
+      // direct resume: session-manager.ts stamps agent_id = '(resumed)' for
+      // those rows (see the spawn() call below this describe block), so a
+      // second, regular resume must not just parrot that placeholder back.
+      mockAgentLoader.getAgent.mockImplementation((id: string) =>
+        id === 'backend-architect' ? makeAgent({ id: 'backend-architect', department: 'engineering' }) : null,
+      );
+      mockAgentLoader.getById.mockImplementation((id: string) =>
+        id === 'backend-architect' ? makeAgent({ id: 'backend-architect', name: 'Backend Architect' }) : null,
+      );
+      mockDb.prepare.mockImplementation((sql: string, params?: unknown[]) => {
+        if (/FROM claude_sessions\s+WHERE id = \?/i.test(sql)) {
+          // Both buildClaudeArgs' own lookup and the separate lookupResumeInfo()
+          // call query by the same resumeSessionId — same row shape works for both.
+          return params?.[0] === 'chained-session-id'
+            ? [{ claude_conversation_id: 'conv-chained', agent_id: '(resumed)', project_id: null }]
+            : [];
+        }
+        if (/FROM claude_sessions\s+WHERE claude_conversation_id = \?/i.test(sql)) {
+          return params?.[0] === 'conv-chained' ? [{ agent_id: 'backend-architect', project_id: null }] : [];
+        }
+        return [];
+      });
+
+      const result = sessionManager.spawn({
+        agentId: 'whatever',
+        task: '',
+        resumeSessionId: 'chained-session-id',
+        interactive: false,
+      });
+
+      const session = sessionManager.findActiveByAgent('backend-architect');
+      expect(session).toBeDefined();
+      expect(session?.sessionId).toBe(result.sessionId);
+      expect(session?.agentName).toBe('Backend Architect');
+      expect(sessionManager.findActiveByAgent('(resumed)')).toBeUndefined();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -384,15 +424,52 @@ describe('SessionManager', () => {
   describe('spawn — direct resume by conversationId', () => {
     it('creates a session without requiring an agent record', () => {
       setMockClaudeCli();
-      // agentLoader.getById should not be called for direct resume
+      // agentId: '' matches the sole real caller (src/stores/sessions.ts
+      // resumeByConversationId). With no claude_sessions row to reverse-look-up
+      // the original agent from (mockDb.prepare defaults to [] in beforeEach),
+      // resolvedAgentId stays null, so agentLoader.getById is never consulted
+      // and the session falls back to the '(resumed)' placeholder — same
+      // pre-Sprint-7.1-round-2 behaviour.
       const result = sessionManager.spawn({
-        agentId: 'any-agent',
+        agentId: '',
         task: '',
         resumeConversationId: 'conv-xyz',
         interactive: true,
       });
       expect(result).toHaveProperty('sessionId');
       expect(mockAgentLoader.getById).not.toHaveBeenCalled();
+      expect(sessionManager.findActiveByAgent('(resumed)')?.sessionId).toBe(result.sessionId);
+    });
+
+    it('G2 review round 2 (identity mismatch): resolves the original agent from the DB reverse-lookup and records ITS id — not "(resumed)" — so findActiveByAgent can find the session', () => {
+      setMockClaudeCli();
+      mockAgentLoader.getAgent.mockImplementation((id: string) =>
+        id === 'backend-architect' ? makeAgent({ id: 'backend-architect', department: 'engineering' }) : null,
+      );
+      mockAgentLoader.getById.mockImplementation((id: string) =>
+        id === 'backend-architect' ? makeAgent({ id: 'backend-architect', name: 'Backend Architect' }) : null,
+      );
+      mockDb.prepare.mockImplementation((sql: string, params?: unknown[]) => {
+        if (/FROM claude_sessions\s+WHERE claude_conversation_id = \?/i.test(sql)) {
+          return params?.[0] === 'conv-xyz' ? [{ agent_id: 'backend-architect', project_id: null }] : [];
+        }
+        return [];
+      });
+
+      const result = sessionManager.spawn({
+        agentId: '', // exactly what resumeByConversationId passes
+        task: '',
+        resumeConversationId: 'conv-xyz',
+        interactive: true,
+      });
+
+      const session = sessionManager.findActiveByAgent('backend-architect');
+      expect(session).toBeDefined();
+      expect(session?.sessionId).toBe(result.sessionId);
+      expect(session?.agentName).toBe('Backend Architect');
+      // The '(resumed)' placeholder must NOT have been used when the real
+      // agent was resolved — that's precisely the bug this fix closes.
+      expect(sessionManager.findActiveByAgent('(resumed)')).toBeUndefined();
     });
   });
 

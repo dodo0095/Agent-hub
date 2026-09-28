@@ -47,6 +47,30 @@ describe('useUiStore().setupNotificationListener (api-design §7.3)', () => {
     expect(toast.message).not.toContain('尚未設定');
   });
 
+  it('shows an ARS_INSTALL_INCOMPLETE toast without duplicating the code (real message-broker.ts shape, MN-B)', () => {
+    const uiStore = useUiStore();
+    uiStore.setupNotificationListener();
+
+    // `message-broker.ts`'s `handleArsAutoSpawnFailure` sends the full
+    // `err.message` — still prefixed with the code — not just the detail.
+    capturedCallback()({
+      level: 'error',
+      code: 'ARS_INSTALL_INCOMPLETE',
+      message:
+        'ARS_INSTALL_INCOMPLETE: 缺少 skills/deep-research/SKILL.md；若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone',
+      source: 'message-broker',
+      agentId: 'publication-operator',
+    });
+
+    expect(uiStore.toasts).toHaveLength(1);
+    const toast = uiStore.toasts[0];
+    expect(toast.title).toBe('[publication-operator] ARS Installation Incomplete');
+    expect(toast.message).toBe(
+      '缺少 skills/deep-research/SKILL.md；若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone',
+    );
+    expect(toast.message).not.toContain('ARS_INSTALL_INCOMPLETE:');
+  });
+
   it('shows a toast for a non-ARS payload using the given title verbatim', () => {
     const uiStore = useUiStore();
     uiStore.setupNotificationListener();

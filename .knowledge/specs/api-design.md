@@ -158,6 +158,7 @@ export function validateArsPluginDir(dir: string): ArsValidationResult;
 | 產生方式 | 一般啟動與兩條 resume 共用同一個函式產生 mcp-agent-config 與 mcp-servers 設定檔（內容與 Sprint 7 前的一般啟動相同） |
 | agent 身分 | 與 §6.2「找出 agent（resume）」相同規則（含 `lookupOriginalAgentIdByConversation`）；找不到有效 agent → **不加** `--mcp-config`，行為與修正前相同 |
 | projectId | resume 時取原 session 的 `claude_sessions.project_id` 寫入 mcp-agent-config（訊息的專案歸屬與原 session 一致） |
+| session 身分 | `buildClaudeArgs` 回傳 `resolvedAgentId`（一般啟動＝`params.agentId`；resume＝反查結果；查不到＝`null`）。`session-manager` 以它登記 session 的 `agentId`／`agentName` 與 `claude_sessions.agent_id`，查不到才沿用 `'(resumed)'`。確保以原 agent 身分發訊的 resume session 能被 broker 的 `findActiveByAgent` 找到，避免重複 auto-spawn |
 | 失敗處理 | 與既有一般啟動相同：包在 try/catch，失敗只 `logger.warn`，**不得**讓 resume 失敗 |
 | 註解 | 移除「resume sessions inherit the original session's MCP config automatically」的錯誤說法（PM-016） |
 
@@ -170,6 +171,7 @@ export function validateArsPluginDir(dir: string): ArsValidationResult;
 | 訊息以 `ARS_` 開頭（設定類錯誤，重試無效） | (1) 對該目標 agent 進入**冷卻 5 分鐘**，期間不再嘗試 auto-spawn，訊息維持 pending；(2) 同一目標 agent＋同一錯誤碼在冷卻期內只通知一次；(3) 以 `fromAgent: 'system'` 回一封訊息給原發訊者（內容含目標 agent、錯誤碼、原錯誤訊息、「請告知老闆到『設定 → 學術出版部』處理」）；(4) 送 UI 通知（§7.3） |
 | 其他錯誤 | 維持現狀（`logger.warn`，下一輪重試） |
 | 防迴圈 | 原發訊者為 `system` 時不回訊息；system 回覆訊息本身若 auto-spawn 失敗，不再回覆 |
+| 順序與容錯 | 先送 UI 通知，再送 system 回訊；回訊失敗只 `logger.warn`，不得讓原投遞流程拋錯。冷卻過期時刪除該 entry |
 
 ### 7.3 UI 通知（沿用既有 `notification` 通道，不新增 IPC）
 

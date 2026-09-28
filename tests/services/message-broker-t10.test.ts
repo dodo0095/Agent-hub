@@ -368,6 +368,58 @@ describe('MessageBroker — ARS_* auto-spawn failure handling (Sprint 7.1 T10)',
         source: 'message-broker',
         agentId: 'publication-operator',
       });
+      // T12 gap: the notification's `message` must carry the detail that
+      // follows the error-code prefix, not just the bare code.
+      expect((notifications[0] as { message: string }).message).toContain(
+        '尚未設定 ARS 路徑，請到「設定」填寫 ARS 路徑',
+      );
+    });
+
+    it('cooldown expires after 5 minutes and a subsequent tryDeliver call can retry auto-spawn (T12 gap)', () => {
+      const callbacks = makeCallbacks();
+      resetBrokerState(callbacks);
+
+      driveTryDeliver(makeMessage({ id: 'msg-1' }));
+      expect(callbacks.spawnSession).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(new Date('2026-09-28T12:05:01.000Z')); // > 5 min later
+
+      driveTryDeliver(makeMessage({ id: 'msg-2' }));
+      expect(callbacks.spawnSession).toHaveBeenCalledTimes(2);
+    });
+
+    it('MN-D: canAutoSpawn deletes the expired cooldown entry instead of leaving it in the map forever', () => {
+      const callbacks = makeCallbacks();
+      resetBrokerState(callbacks);
+
+      driveTryDeliver(makeMessage());
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cooldownMap: Map<string, unknown> = (messageBroker as any).arsFailureCooldown;
+      expect(cooldownMap.has('publication-operator')).toBe(true);
+
+      vi.setSystemTime(new Date('2026-09-28T12:05:01.000Z')); // > 5 min later
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (messageBroker as any).canAutoSpawn('publication-operator');
+
+      expect(cooldownMap.has('publication-operator')).toBe(false);
+    });
+
+    it('MN-E: a failure while sending the "system" reply is caught and only warned — it must not escape to the original tryDeliver caller, and the notification still went out', () => {
+      const callbacks = makeCallbacks();
+      resetBrokerState(callbacks);
+      mockDbRun.mockImplementation((sql: string) => {
+        if (String(sql).includes('INSERT INTO messages')) {
+          throw new Error('database is locked');
+        }
+      });
+
+      expect(() => driveTryDeliver(makeMessage())).not.toThrow();
+
+      // The notification must still have gone out even though the reply's
+      // own persistence failed.
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({ code: 'ARS_PATH_NOT_SET', agentId: 'publication-operator' });
+      expect(mockLoggerWarn).toHaveBeenCalled();
     });
 
     it('cooldown blocks a second tryDeliver auto-spawn attempt for the same agent', () => {
@@ -438,6 +490,47 @@ describe('MessageBroker — ARS_* auto-spawn failure handling (Sprint 7.1 T10)',
       expect(notifications).toHaveLength(2);
       expect((notifications[0] as { code: string }).code).toBe('ARS_PATH_NOT_SET');
       expect((notifications[1] as { code: string }).code).toBe('ARS_INSTALL_INCOMPLETE');
+    });
+
+    it('MN-G: anti-loop end-to-end — the "system" reply target is ALSO offline and its own auto-spawn ALSO fails with ARS_, but no second reply is produced', () => {
+      // Everyone is offline and every auto-spawn attempt fails with ARS_ —
+      // this is the cascade the G2 review round-2 report walked through by
+      // hand (§2): research-director (R) messages publication-operator (P);
+      // P's auto-spawn fails → system replies to R; R is ALSO offline, so
+      // send() → tryDeliver(system→R) ALSO tries to auto-spawn R, which
+      // ALSO fails with ARS_ → handleArsAutoSpawnFailure(R, from='system')
+      // — and the fromAgent === 'system' check stops it right there.
+      const callbacks: BrokerCallbacks = {
+        findActiveSessionByAgent: () => undefined, // nobody has an active session
+        spawnSession: vi.fn(() => {
+          throw new Error('ARS_PATH_NOT_SET: 尚未設定 ARS 路徑');
+        }),
+        getSession: (): BrokerSessionView | undefined => undefined,
+      };
+      resetBrokerState(callbacks);
+
+      driveTryDeliver(makeMessage()); // research-director → publication-operator
+
+      // Exactly ONE system reply was EVER persisted (system → research-director).
+      // A second one (system → research-director's own failed auto-spawn) must
+      // not exist — that's precisely what the anti-loop check prevents.
+      const insertCalls = mockDbRun.mock.calls.filter(([sql]) => String(sql).includes('INSERT INTO messages'));
+      expect(insertCalls).toHaveLength(1);
+      expect(insertCalls[0][1][1]).toBe('system');
+      expect(insertCalls[0][1][2]).toBe('research-director');
+
+      // Two notifications: publication-operator's original failure, and
+      // research-director's own (system-triggered) auto-spawn failure.
+      expect(notifications).toHaveLength(2);
+      expect((notifications[0] as { agentId: string }).agentId).toBe('publication-operator');
+      expect((notifications[1] as { agentId: string }).agentId).toBe('research-director');
+
+      // Both ended up cooled down; no third level of cascade was attempted.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((messageBroker as any).canAutoSpawn('publication-operator')).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((messageBroker as any).canAutoSpawn('research-director')).toBe(false);
+      expect(callbacks.spawnSession).toHaveBeenCalledTimes(2); // P once, R once — never a 3rd
     });
   });
 });

@@ -1,16 +1,22 @@
-import { ARS_ERROR_CODES, type ArsErrorCode } from './ipc-error';
+import { ARS_ERROR_CODES, parseArsError, type ArsErrorCode } from './ipc-error';
 import { buildArsErrorToast, type SpawnErrorToast, type Translate } from './spawn-error';
 
 /** Payload shape for the `notification` IPC channel (api-design §7.3). The
  * main process sends this via `safeSend(IpcChannels.NOTIFICATION, payload)`
  * — same wiring as `message:created` — for out-of-band events like a
- * MessageBroker auto-spawn failure. */
+ * MessageBroker auto-spawn failure.
+ *
+ * `source` is narrowed to the one value the backend actually emits today
+ * (`electron/services/message-broker.ts`'s `handleArsAutoSpawnFailure`) for
+ * type safety / documentation. `isValidAppNotification` deliberately does
+ * NOT check `source` at runtime — an unrecognized value is still accepted
+ * so a future emitter isn't silently dropped by the renderer. */
 export interface AppNotificationPayload {
   level: 'error' | 'warning' | 'info';
   code?: string;
   title?: string;
   message: string;
-  source: string;
+  source: 'message-broker';
   agentId?: string;
 }
 
@@ -39,6 +45,21 @@ function normalizeLevel(level: unknown): NotificationLevel {
     : 'error';
 }
 
+/** `message-broker.ts`'s `handleArsAutoSpawnFailure` sends the FULL error
+ * string as `message` (e.g. `"ARS_INSTALL_INCOMPLETE: 缺少 ..."`), not just
+ * the detail after the code — unlike the fixtures used when this module was
+ * first written. Strip the `"<code>: "` prefix before handing the detail to
+ * `buildArsErrorToast`, otherwise `ARS_INSTALL_INCOMPLETE` toasts show the
+ * error code twice. `payload.code` is the source of truth for which code
+ * this is; if the message's own prefix doesn't match it (should not happen
+ * given how the backend builds `code` from the same string, but destructive
+ * to guess at), the message is left untouched rather than stripping the
+ * wrong thing. */
+function stripKnownArsPrefix(code: ArsErrorCode, message: string): string {
+  const parsed = parseArsError(message);
+  return parsed && parsed.code === code ? parsed.detail : message;
+}
+
 export interface AppNotificationToast extends SpawnErrorToast {
   type: NotificationLevel;
 }
@@ -60,7 +81,7 @@ export function buildAppNotificationToast(
   const type = normalizeLevel(payload.level);
 
   const base = isArsErrorCode(payload.code)
-    ? buildArsErrorToast(payload.code, payload.message, t)
+    ? buildArsErrorToast(payload.code, stripKnownArsPrefix(payload.code, payload.message), t)
     : { title: payload.title || t('notifications.genericTitle'), message: payload.message };
 
   if (!payload.agentId) {

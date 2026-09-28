@@ -430,7 +430,13 @@ class MessageBroker {
     // both auto-spawn call sites (InboxPoller, tryDeliver) gate on this
     // method, so this single check blocks further attempts from either path.
     const cooldown = this.arsFailureCooldown.get(agentId);
-    if (cooldown && cooldown.until > Date.now()) return false;
+    if (cooldown) {
+      if (cooldown.until > Date.now()) return false;
+      // MN-D (G2 review round 2): actually delete the expired entry instead
+      // of leaving it in the map forever (comment previously claimed it was
+      // "cleared once `until` passes" but nothing did that).
+      this.arsFailureCooldown.delete(agentId);
+    }
 
     const now = Date.now();
     const history = this.spawnHistory.get(agentId) || [];
@@ -463,12 +469,25 @@ class MessageBroker {
    *    agent while its cooldown is active, but this check is kept as an
    *    explicit belt-and-suspenders guard matching the spec wording, and to
    *    protect against a future async `spawnSession` implementation.
-   * 3. Replies to the ORIGINAL sender (`fromAgent`) as `'system'` — unless
+   * 3. Emits `app:notification` for the UI toast (main.ts forwards it to
+   *    the renderer over the existing `notification` IPC channel).
+   * 4. Replies to the ORIGINAL sender (`fromAgent`) as `'system'` — unless
    *    `fromAgent` is itself `'system'`, which would create a reply loop
    *    (a system notification about a system notification's own auto-spawn
    *    failure, forever).
-   * 4. Emits `app:notification` for the UI toast (main.ts forwards it to
-   *    the renderer over the existing `notification` IPC channel).
+   *
+   * MN-E (G2 review round 2): the reply is sent AFTER the notification is
+   * emitted, and is wrapped in its own try/catch that only `logger.warn`s.
+   * Order and isolation both matter here: this whole method runs inside the
+   * catch block of the ORIGINAL SendMessage/delivery attempt (InboxPoller or
+   * tryDeliver) — if `send()` for the reply were to throw (e.g. the DB
+   * insert fails) and we didn't catch it, that exception would propagate
+   * out to whatever originally called `tryDeliver`/`checkInboxFile`, making
+   * an unrelated failure (the reply) look like the ORIGINAL SendMessage call
+   * itself failed, even though the original message was already persisted
+   * successfully. Emitting the notification first (before the reply, which
+   * is the more failure-prone step) also guarantees the UI toast still gets
+   * sent even if the reply fails.
    */
   private handleArsAutoSpawnFailure(
     targetAgent: string,
@@ -493,20 +512,8 @@ class MessageBroker {
 
     if (alreadyNotified) return;
 
-    // Anti-loop: never reply to a message that already came from 'system'.
-    if (fromAgent !== 'system') {
-      this.send({
-        fromAgent: 'system',
-        toAgent: fromAgent,
-        content:
-          `無法自動啟動 ${targetAgent}：${code}\n\n` +
-          `錯誤訊息：${message}\n\n` +
-          `原訊息：${originalContent}\n\n` +
-          '請告知老闆到「設定 → 學術出版部」處理。',
-        projectId: projectId || undefined,
-      });
-    }
-
+    // MN-E: emit the UI notification FIRST — it must go out even if the
+    // reply below fails.
     const notification: AppNotification = {
       level: 'error',
       code,
@@ -515,6 +522,26 @@ class MessageBroker {
       agentId: targetAgent,
     };
     eventBus.emit('app:notification', notification);
+
+    // Anti-loop: never reply to a message that already came from 'system'.
+    if (fromAgent !== 'system') {
+      // MN-E: never let a failure while sending THIS reply escape to the
+      // caller — it must not look like the original SendMessage failed.
+      try {
+        this.send({
+          fromAgent: 'system',
+          toAgent: fromAgent,
+          content:
+            `無法自動啟動 ${targetAgent}：${code}\n\n` +
+            `錯誤訊息：${message}\n\n` +
+            `原訊息：${originalContent}\n\n` +
+            '請告知老闆到「設定 → 學術出版部」處理。',
+          projectId: projectId || undefined,
+        });
+      } catch (sendErr) {
+        logger.warn(`MessageBroker: failed to send ARS failure notice to ${fromAgent}`, sendErr);
+      }
+    }
   }
 
   // ─── Query ─────────────────────────────────────────────────────────────────
