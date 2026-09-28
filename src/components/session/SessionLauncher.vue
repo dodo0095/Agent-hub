@@ -10,7 +10,9 @@ import { useAgentsStore } from '../../stores/agents';
 import { useSessionsStore } from '../../stores/sessions';
 import { useTasksStore, type TaskRecord } from '../../stores/tasks';
 import { useProjectsStore } from '../../stores/projects';
+import { useUiStore } from '../../stores/ui';
 import { useIpc } from '../../composables/useIpc';
+import { extractIpcErrorMessage, parseArsError, type ArsErrorCode } from '../../utils/ipc-error';
 
 export interface RemixData {
   agentId: string;
@@ -39,7 +41,14 @@ const agentsStore = useAgentsStore();
 const sessionsStore = useSessionsStore();
 const tasksStore = useTasksStore();
 const projectsStore = useProjectsStore();
+const uiStore = useUiStore();
 const ipc = useIpc();
+
+const arsErrorTitleKeys: Record<ArsErrorCode, string> = {
+  ARS_PATH_NOT_SET: 'sessions.launcher.arsPathNotSetTitle',
+  ARS_INSTALL_INCOMPLETE: 'sessions.launcher.arsInstallIncompleteTitle',
+  ARS_REQUIRES_INTERACTIVE: 'sessions.launcher.arsRequiresInteractiveTitle',
+};
 
 const selectedAgentId = ref('');
 const task = ref('');
@@ -229,6 +238,17 @@ async function launch() {
     emit('close');
   } catch (err) {
     console.error('Failed to launch session', err);
+    const message = extractIpcErrorMessage(err, t('sessions.launcher.launchFailedFallback'));
+    const arsError = parseArsError(message);
+    if (arsError) {
+      const detail =
+        arsError.code === 'ARS_PATH_NOT_SET'
+          ? `${arsError.detail} ${t('sessions.launcher.arsPathNotSetHint')}`
+          : arsError.detail;
+      uiStore.addToast(detail, 'error', t(arsErrorTitleKeys[arsError.code]));
+    } else {
+      uiStore.addToast(message, 'error', t('sessions.launcher.launchFailed'));
+    }
   } finally {
     launching.value = false;
   }

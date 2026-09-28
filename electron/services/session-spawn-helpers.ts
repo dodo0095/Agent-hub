@@ -85,6 +85,44 @@ function injectArsPluginDirIfNeeded(args: string[], department: string | undefin
   if (arsPath) args.push('--plugin-dir', arsPath);
 }
 
+/**
+ * Reverse-lookup the original agent_id for a Claude conversation from
+ * `claude_sessions`, excluding rows whose `agent_id` is NULL, `''`, or the
+ * `'(resumed)'` placeholder that direct-resume-created rows are stamped
+ * with (see `session-manager.ts` where the new session row is inserted).
+ * Returns the EARLIEST matching row's agent_id — the original spawn that
+ * first established the conversation, before any resume rows existed for it.
+ *
+ * Shared by two callers (G2 review round 2, MN-8):
+ * - direct resume (`resumeConversationId`), which has no session row of its
+ *   own to consult for the original agent.
+ * - regular resume (`resumeSessionId`), when THAT session row's own
+ *   `agent_id` is itself a placeholder — i.e. resuming a session that was
+ *   previously created by a direct resume, which always stamps `'(resumed)'`.
+ *   Without this fallback that second resume would silently drop ARS.
+ *
+ * No result (query finds nothing) or a DB exception are both treated as
+ * "original agent unknown" — logged via `logger.warn` on exception, never
+ * thrown. This must never break resume for non-publication conversations.
+ */
+function lookupOriginalAgentIdByConversation(conversationId: string | null | undefined): string | null {
+  if (!conversationId) return null;
+  try {
+    const rows = database.prepare(
+      `SELECT agent_id FROM claude_sessions
+       WHERE claude_conversation_id = ?
+         AND agent_id IS NOT NULL AND agent_id != '' AND agent_id != '(resumed)'
+       ORDER BY started_at ASC
+       LIMIT 1`,
+      [conversationId],
+    );
+    if (rows.length > 0 && rows[0].agent_id) return rows[0].agent_id;
+  } catch (err) {
+    logger.warn('Failed to look up original agent by conversation id', err);
+  }
+  return null;
+}
+
 /** Resolve path to the statusline Node.js script (works in both dev and packaged). */
 function getStatuslineScriptPath(): string {
   if (app.isPackaged) {
@@ -127,31 +165,18 @@ export function buildClaudeArgs(
     // resume — the sole caller (src/stores/sessions.ts resumeByConversationId)
     // always passes agentId: ''. Falling back to it silently dropped ARS for
     // resumed academic-publication sessions. Prefer params.agentId only when
-    // it is actually non-empty; otherwise look up the original agent from the
-    // earliest claude_sessions row that recorded a real agent_id for this
-    // conversation (placeholder values 'null'/''/'(resumed)' excluded).
+    // it is actually non-empty; otherwise look up the original agent via
+    // lookupOriginalAgentIdByConversation (placeholder values NULL/''/'(resumed)'
+    // excluded there — MN-9: this used to say "the string 'null'", which the
+    // SQL never actually checked for; the SQL checks `IS NULL`).
     const directAgentId = params.agentId && params.agentId.trim() !== '' ? params.agentId : null;
     let directResumeDepartment: string | undefined;
     if (directAgentId) {
       directResumeDepartment = agentLoader.getAgent(directAgentId)?.department;
     } else {
-      try {
-        const rows = database.prepare(
-          `SELECT agent_id FROM claude_sessions
-           WHERE claude_conversation_id = ?
-             AND agent_id IS NOT NULL AND agent_id != '' AND agent_id != '(resumed)'
-           ORDER BY started_at ASC
-           LIMIT 1`,
-          [params.resumeConversationId],
-        );
-        if (rows.length > 0 && rows[0].agent_id) {
-          directResumeDepartment = agentLoader.getAgent(rows[0].agent_id)?.department;
-        }
-      } catch (err) {
-        // Lookup failure must not break direct resume for non-publication
-        // agents — treat as "original agent unknown" (no-op, same as if no
-        // row had matched).
-        logger.warn('Failed to look up original agent for direct resume', err);
+      const originalAgentId = lookupOriginalAgentIdByConversation(params.resumeConversationId);
+      if (originalAgentId) {
+        directResumeDepartment = agentLoader.getAgent(originalAgentId)?.department;
       }
     }
     injectArsPluginDirIfNeeded(directResumeArgs, directResumeDepartment, interactive);
@@ -178,7 +203,17 @@ export function buildClaudeArgs(
     }
     logger.info(`Resuming session ${params.resumeSessionId} (claude conv: ${claudeConvId}) as new session ${sessionId}`);
     const resumeArgs = ['--resume', claudeConvId];
-    const resumeAgent = resumeAgentId ? agentLoader.getAgent(resumeAgentId) : undefined;
+    // MN-8 (G2 review round 2): a session row created by an earlier direct
+    // resume always has agent_id = '(resumed)' (session-manager.ts, direct
+    // resume insert) — not a usable department lookup key. When the row we
+    // just read has no real agent_id, fall back to the same
+    // conversation-id reverse lookup direct resume uses, so resuming a
+    // session that itself came from a direct resume doesn't silently drop ARS.
+    const resumeEffectiveAgentId =
+      resumeAgentId && resumeAgentId !== '(resumed)'
+        ? resumeAgentId
+        : lookupOriginalAgentIdByConversation(claudeConvId);
+    const resumeAgent = resumeEffectiveAgentId ? agentLoader.getAgent(resumeEffectiveAgentId) : undefined;
     injectArsPluginDirIfNeeded(resumeArgs, resumeAgent?.department, interactive);
     return { args: resumeArgs, tmpFile: null };
   }

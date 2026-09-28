@@ -166,6 +166,14 @@ const mockMaestro = {
     ptyData: vi.fn(),
     notification: vi.fn(),
     agentsReloaded: vi.fn(),
+    delegationReport: vi.fn(),
+    gateStatusChanged: vi.fn(),
+    projectSynced: vi.fn(),
+    messageCreated: vi.fn(),
+    messageDelivered: vi.fn(),
+    messageRead: vi.fn(),
+    taskUpdated: vi.fn(),
+    costBackfillCompleted: vi.fn(),
   },
 };
 

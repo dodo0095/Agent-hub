@@ -113,7 +113,7 @@ Skill 執行完成後的產出必須符合：
 | agent.department === `academic-publication`（一般啟動或 resume） | 依序：讀 `ars.plugin-dir`（trim、去除首尾成對雙引號）→ `validateArsPluginDir()` → 檢查互動模式 → `args.push('--plugin-dir', <path>)`。一般啟動時此檢查在任何寫檔之前執行 |
 | 其他部門 | 參數與 Sprint 7 前**完全相同**（不讀設定、不驗證、不加參數） |
 | 判斷依據 | 用 department，不寫死 agent id |
-| 找出 agent（resume） | `isResume`：`claude_sessions.agent_id`（依 `resumeSessionId`）。`isDirectResume`：`params.agentId` 非空則用之；否則以 `resumeConversationId` 查 `claude_sessions` 中 `agent_id` 有效（非 null／空／`(resumed)`）的最早一筆。查不到或 DB 例外 → 視為非出版部，不拋錯 |
+| 找出 agent（resume） | `isResume`：`claude_sessions.agent_id`（依 `resumeSessionId`）；若該值為 null／空／`(resumed)`（由 direct resume 產生的 session），改以該 session 的 `claude_conversation_id` 做與 direct resume 相同的反查。`isDirectResume`：`params.agentId` 非空則用之；否則以 `resumeConversationId` 查 `claude_sessions` 中 `agent_id` 有效（非 null／空／`(resumed)`）的最早一筆。查不到或 DB 例外 → 視為非出版部，不拋錯 |
 
 ### 6.3 驗證器
 

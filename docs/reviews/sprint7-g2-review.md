@@ -207,3 +207,96 @@ $ grep -n "個資\|個人資料\|隱私" publication-operator.md  → 0 筆
 - ARS_* 錯誤經 `ipcRenderer.invoke` 傳回 renderer 後，UI 是否顯示可讀訊息：未驗證（呼叫端錯誤呈現未追）。
 - MessageBroker auto-spawn 失敗後的重試頻率：只讀程式碼，未實測。
 - 未跑 `node scripts/preflight.cjs` 與 `npm run build`。
+
+---
+
+## 第二輪 Review（commit 5219afa）
+
+> 審查者：同一位獨立 reviewer（未參與修正）
+> 日期：2026-09-28
+> 範圍：`git diff 64ebd01..5219afa`（10 檔，+537 / −33；其中 `docs/reviews/sprint7-g2-review.md` 為第一輪報告本身）
+> 判定：**✅ 通過**（🔴 0 / 🟠 0 / 🟡 2 新增，皆可延後）
+
+### R2-1. 第一輪問題逐項結果
+
+| # | 問題 | 結果 | 證據 |
+|---|------|:--:|------|
+| MJ-1 | direct resume 靜默掉 ARS | ✅ 已修 | `session-spawn-helpers.ts:133-158`：`params.agentId` 非空（trim 後）才直接用；否則以 `resumeConversationId` 查 `claude_sessions`，排除 `NULL`／`''`／`'(resumed)'`，`ORDER BY started_at ASC LIMIT 1`；查無資料或 DB 例外時 `logger.warn` 後照常 resume，不拋錯。和更新後 api-design §6.2「找出 agent（resume）」列逐項相符。錯誤註解已移除。資料來源成立：一般啟動會回寫 `claude_conversation_id`（`session-manager.ts:1112`）；direct resume 自己那筆 row 的 agent_id 是 `'(resumed)'`（`session-manager.ts:300`），會被正確排除 |
+| MJ-1 測試 | 缺 direct resume 測試 | ✅ | 新增 4 案：`agentId ''` 且原 agent 是出版部 → 含 `--plugin-dir`；原 agent 是工程部 → `toEqual(['--resume', conv])`；查無 row → 不拋錯且參數不變；`params.agentId` 非空時優先使用、不查 DB。全部是 `toEqual` 整個陣列的精確斷言 |
+| MJ-2 | prompt 缺個資條款 | ✅ 已修 | `publication-operator.md`【部門紀律】第一條：只讀 scholar-profile.md／venue-list.md，禁止讀取、搜尋、複製其他個資，需要更多背景時經總監向老闆索取。`agent-prompts.md`、department-structure「硬性規則」已同步。和 README「個人資料只放在你的專案裡」不衝突 |
+| MN-1 | auto-spawn 失敗老闆看不到 | ✅ 可以接受列 backlog | 見 R2-3 |
+| MN-2 | 路徑沒有 trim、沒去引號 | ✅ 已修 | `session-spawn-helpers.ts:60`：先 `trim`，再去掉首尾成對雙引號，再 `trim` 一次；純空白 → `ARS_PATH_NOT_SET`。api-design §6.2、§6.4 已同步。3 個測試（去引號、去空白、純空白） |
+| MN-3 | 驗證器沒檢查是不是「檔案」 | ✅ 已修 | `ars-validator.ts:49-50` 改用 `statSync(..., { throwIfNoEntry: false })?.isFile()`；api-design §6.3 已同步。新增「SKILL.md 是資料夾」的真實 temp 目錄測試。本機實測（Node v24.14.0、Windows）：對 `stub檔/SKILL.md` 做 stat 會回傳 `undefined`，不會拋錯 |
+| MN-4 | dev-plan 檔名與紀錄 | ✅ 已修（部分待回填） | §4 補上 2 個新測試檔並更正路徑，§7 路徑也已更正。§10 的 T3–T6 仍空白，依第一輪建議在 G2 通過後回填 |
+| MN-5 | department-structure 的 skills_sub 矛盾 | ✅ 已修 | 改成「研究部下屬 Skills（…**不含 ARS**…）」 |
+| MN-6 | 出版部讀設定時 DB 例外 | ✅ 已修 | `session-spawn-helpers.ts:48-55`：catch 後拋 `ARS_PATH_NOT_SET: 無法讀取 ARS 路徑設定（<原因>）`，並帶 `cause`；api-design §6.4 已同步。有測試斷言錯誤碼前綴與原錯誤字串 |
+| MN-7.1 | 沒驗證「不讀設定」 | ✅ | 測試斷言 `mockDbPrepare` 從未帶 `['ars.plugin-dir']` 被呼叫 |
+| MN-7.2 | 錯誤優先順序 | ✅ | 非互動模式加上未設定路徑 → `ARS_PATH_NOT_SET` |
+| MN-7.3 | 訊息內容 | ✅ | 斷言缺檔清單中的 3 個路徑，以及兩段修法字句 |
+| MN-7.4 | resume 時 agent_id 為 null | ✅ | `toEqual(['--resume', 'conv-null-agent'])` |
+
+### R2-2. 非出版部 session 是否多出新的拋錯路徑
+
+逐條檢查新增的程式碼：
+
+- **direct resume 查 DB**：包在 try/catch 內，失敗時只記 warn，不拋錯（`:137-157`）。`params.agentId && params.agentId.trim()` 在 agentId 是 `undefined` 或 `''` 時會短路，不會對 undefined 呼叫 trim。`agentLoader.getAgent` 只是 Map 查找，不會拋錯。
+- **`resolveArsPluginDir`**：新增的 try/catch 和 trim 都在 `department !== ARS_DEPARTMENT` 這個 early return 之後（`:44`），非出版部 session 走不到。
+- **行為差異只有一項**：非出版部的 direct resume 現在會多做一次 `claude_sessions` 讀取查詢。這是找出 agent 的必要步驟，api-design §6.2 已明文寫入，而且查詢失敗不影響 resume。
+
+結論：**沒有新增會讓非出版部 session 拋錯的路徑**。
+
+### R2-3. MN-1 列 backlog 是否可以接受
+
+可以接受。理由：
+
+- 影響只限出版部的 auto-spawn，不會拋錯到其他部門，也不會寫出孤兒檔。
+- 老闆從 GUI 手動啟動時，會直接看到 `ARS_*` 錯誤。
+- backlog 檔（`Agent-hub/.tasks/backlog/S7-MN1-ars-autospawn-error-visibility.md`）有問題描述、位置、3 條可驗收標準和負責人，符合 Minor「記錄、後續處理」的規則（`code-review.md:57`）。
+- 建議：T7 端到端驗證時順帶觀察一次 auto-spawn 失敗的 log，作為 backlog 的重現證據。
+
+### R2-4. 新增問題
+
+#### 🟡 MN-8：一般 resume 一個「由 direct resume 產生的出版部 session」，會掉 ARS
+
+- **位置**：`session-spawn-helpers.ts:162-178`（isResume 分支）、`session-manager.ts:300`
+- **問題**：direct resume 建立的新 session row，agent_id 固定寫 `'(resumed)'`。如果這個 session 之後又中斷，老闆改用 `resumeSessionId` 從 Hub 的 session 清單接回，isResume 分支會拿到 `'(resumed)'` 當 agent，`getAgent` 回傳 undefined，結果 ARS 不注入，也不報錯。程式碼符合 api-design §6.2 目前的寫法（「isResume：claude_sessions.agent_id」），所以缺口在規範本身。這是連續兩次 resume 才會遇到的情境。Hub 的 session 清單是否真的對這類 session 提供 resume 入口，我沒有實測。
+- **建議**：isResume 查到的 agent_id 若為 `'(resumed)'`，退回用該 row 的 `claude_conversation_id` 走 direct resume 同一套反查；並把這條加進 api-design §6.2。另一種作法：direct resume 查到原 agent 後，把它回寫進新 session 的 agent_id。可以併入 T7 或列 backlog。
+
+#### 🟡 MN-9：註解和 SQL 不一致（純文件）
+
+- **位置**：`session-spawn-helpers.ts:132` 註解寫排除 `'null'`（字串），但 SQL（`:142`）排除的是 `IS NULL`。行為是正確的。
+- **建議**：註解改成「NULL／''／'(resumed)'」。
+
+測試檔 `session-spawn-helpers.test.ts:36`、`:49` 有 2 個 `no-explicit-any` warning（mock 型別），第一輪已記錄，不另列。
+
+### R2-5. 驗證指令輸出
+
+```
+$ git rev-parse --short HEAD        → 5219afa
+$ npx vitest run
+ Test Files  29 passed (29)
+      Tests  414 passed (414)       （第一輪 402 → +12：spawn-helpers +11、ars-validator +1）
+EXIT 0
+$ npm run lint
+✖ 128 problems (0 errors, 128 warnings)   EXIT 0（總數和第一輪相同）
+$ npm run typecheck
+tsc -p tsconfig.node.json / tsconfig.web.json → 無錯誤   EXIT 0
+$ node -e "statSync('<tmp>/stub/SKILL.md', {throwIfNoEntry:false})"   （Node v24.14.0，Windows）
+undefined
+```
+
+### R2-6. 第二輪判定
+
+| 等級 | 數量 | 項目 |
+|------|:--:|------|
+| 🔴 Blocker | 0 | — |
+| 🟠 Major | 0 | MJ-1、MJ-2 已修正並有測試 |
+| 🟡 Minor | 2（新增） | MN-8、MN-9；MN-1 已列 backlog，可以接受 |
+
+**✅ 通過**（0 Blocker + 0 Major），可以提交 G2。MN-8 建議併入 T7 驗證或列 backlog；MN-9 可以順手修。
+
+### R2-7. 第二輪未驗證項目
+
+- 在 POSIX（Linux／macOS）上，`statSync` 遇到 ENOTDIR 時 `throwIfNoEntry: false` 是否同樣回傳 undefined：只在 Windows 實測。Hub 目前只跑 Windows，影響低。
+- MN-8 的情境在 GUI 上是否真的能觸發：沒有實測。
+- 真實 Hub 啟動（T7 範圍）、`preflight.cjs`、`npm run build`：本輪也沒有執行。

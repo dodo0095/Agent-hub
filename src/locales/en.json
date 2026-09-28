@@ -128,6 +128,12 @@
       "selectFolder": "Select folder...",
       "unassignedProject": "Unassigned Project",
       "promptPreviewError": "Unable to load prompt preview",
+      "launchFailed": "Launch Failed",
+      "launchFailedFallback": "An unknown error occurred while launching",
+      "arsPathNotSetTitle": "ARS Path Not Set",
+      "arsInstallIncompleteTitle": "ARS Installation Incomplete",
+      "arsRequiresInteractiveTitle": "ARS Requires Interactive Mode",
+      "arsPathNotSetHint": "Go to Settings → Academic Publication to set the ARS path.",
       "modelOpus": "Most Powerful",
       "modelSonnet": "Balanced",
       "modelHaiku": "Fast"

@@ -128,6 +128,12 @@
       "selectFolder": "選擇資料夾...",
       "unassignedProject": "未分配專案",
       "promptPreviewError": "無法載入 Prompt 預覽",
+      "launchFailed": "啟動失敗",
+      "launchFailedFallback": "啟動時發生未知錯誤",
+      "arsPathNotSetTitle": "尚未設定 ARS 路徑",
+      "arsInstallIncompleteTitle": "ARS 安裝不完整",
+      "arsRequiresInteractiveTitle": "ARS 需要互動模式",
+      "arsPathNotSetHint": "請到「設定 → 學術出版部」填寫 ARS 路徑。",
       "modelOpus": "最強大",
       "modelSonnet": "平衡",
       "modelHaiku": "快速"

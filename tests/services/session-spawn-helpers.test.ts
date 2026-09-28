@@ -323,6 +323,53 @@ describe('buildClaudeArgs — ARS plugin-dir injection', () => {
     expect(args).toEqual(['--resume', 'conv-null-agent']);
   });
 
+  // ─── MN-8 (G2 review round 2): resume of a session that was itself ────────
+  // created by an earlier direct resume. That row's agent_id is always the
+  // '(resumed)' placeholder (session-manager.ts), so isResume must fall back
+  // to the same conversation-id reverse lookup direct resume uses.
+
+  it('MN-8: injects --plugin-dir when resuming a session whose agent_id is the "(resumed)" placeholder and the conversation traces back to academic-publication', () => {
+    mockGetAgent.mockImplementation((id: string) =>
+      id === 'publication-operator' ? { department: 'academic-publication' } : undefined,
+    );
+    configureDb({
+      arsPluginDir: ARS_DIR,
+      resumeSession: { id: 'sess-chained', claude_conversation_id: 'conv-chained-pub', agent_id: '(resumed)' },
+      directResumeConv: { convId: 'conv-chained-pub', agentId: 'publication-operator' },
+    });
+    setupArsFs(true);
+
+    const params: SpawnParams = {
+      agentId: 'whatever',
+      task: '',
+      resumeSessionId: 'sess-chained',
+      projectId: null,
+    };
+    const { args } = buildClaudeArgs(params, 'sess-resume-chained-pub', 'sonnet', 10, true, true, false);
+
+    expect(args).toEqual(['--resume', 'conv-chained-pub', '--plugin-dir', ARS_DIR]);
+  });
+
+  it('MN-8: does not add --plugin-dir and does not throw when the "(resumed)" placeholder cannot be traced back to any agent', () => {
+    configureDb({
+      resumeSession: { id: 'sess-chained-unknown', claude_conversation_id: 'conv-chained-unknown', agent_id: '(resumed)' },
+      // No directResumeConv configured — the reverse lookup finds nothing.
+    });
+
+    const params: SpawnParams = {
+      agentId: 'whatever',
+      task: '',
+      resumeSessionId: 'sess-chained-unknown',
+      projectId: null,
+    };
+    let result: ReturnType<typeof buildClaudeArgs> | undefined;
+    expect(() => {
+      result = buildClaudeArgs(params, 'sess-resume-chained-unknown', 'sonnet', 10, true, true, false);
+    }).not.toThrow();
+
+    expect(result!.args).toEqual(['--resume', 'conv-chained-unknown']);
+  });
+
   // ─── MJ-1 (G2 review): direct resume must not silently drop ARS ───────────
   // The sole caller (src/stores/sessions.ts resumeByConversationId) always
   // passes agentId: '' — buildClaudeArgs must fall back to looking up the
