@@ -1,6 +1,6 @@
 # Sprint 4 — 功能規格書
 
-> 版本: v1.0 | Sprint 4 | 最後更新: 2026-04-11
+> 版本: v2.0 | Sprint 4 建立、Sprint 7 擴充（ARS 整合）| 最後更新: 2026-09-28
 > 範圍: academic-research 部門四條工作流程的功能規格與驗收標準
 
 ## 概述
@@ -157,3 +157,48 @@ E2E 測試題材：**金融科技**（G0 決議）
 | 可重現性 | 同一題目執行兩次，文獻搜尋結果一致性 ≥ 80% |
 | 安全性 | `.outputs/` 不得進 git；禁止將未發表論文內容外流 |
 | 可維護性 | 每個 Skill 獨立，修改一個不影響其他 |
+
+---
+
+## 6. Sprint 7 — 學術出版部與 ARS 整合（v2.0 新增）
+
+> 使用者面的運作規則以 `README.md`「學術事業群使用指南」為準，本節定義系統行為與驗收標準。
+
+### 6.1 功能模組
+
+| # | 功能 | 說明 |
+|---|------|------|
+| F7 | 學術出版部 | 新部門 `academic-publication`，成員 publication-operator，GUI 顯示「學術出版部」 |
+| F8 | ARS 路徑設定 | 設定頁輸入 ARS 根目錄，存 `ars.plugin-dir` |
+| F9 | ARS 注入 | 啟動（含 resume）出版部 agent 時自動載入 ARS；其他 agent 不受影響 |
+| F10 | ARS 完整性檢查 | 啟動前檢查 plugin.json 與 4 個 SKILL.md，不完整則拒絕啟動並說明修法 |
+
+### 6.2 用戶流程
+
+1. 老闆一次性準備：自行下載 ARS → 設定頁填 ARS 路徑。
+2. 老闆向 research-director 提出論文需求 → 總監分流（README 分流表）→ 產出**開案簡報**，老闆確認。
+3. 總監指派 publication-operator，Hub 以互動模式啟動並注入 ARS。
+4. 操作員依簡報執行 ARS 指令（如 `/ars-full`）；**每個檢查點由老闆在該 session 直接回覆**，操作員不代答。
+5. 例外（誠信檢查連 3 輪不過、Reject、成本或時程超出預估）→ 操作員回報總監，由總監召集老闆決定。
+6. 定稿 → 操作員回報總監 → 總監做出口驗收與後續轉交。
+
+### 6.3 邊界條件
+
+| 情境 | 預期行為 |
+|------|---------|
+| 未設定 ARS 路徑 | 拒絕啟動，`ARS_PATH_NOT_SET` |
+| ARS 為 zip 解壓、skills/ 內是 stub 檔 | 拒絕啟動，`ARS_INSTALL_INCOMPLETE`，列出缺的 SKILL.md 與修法 |
+| 以非互動模式啟動出版部 agent（例如任務自動派發） | 拒絕，`ARS_REQUIRES_INTERACTIVE` |
+| resume 中斷的出版部 session | 重新注入 `--plugin-dir`，ARS 仍可用 |
+| 其他部門 agent 啟動 | 行為與 Sprint 7 前完全相同 |
+| 設定了路徑但使用者之後移動或刪除 ARS | 下次啟動時由驗證器擋下 |
+
+### 6.4 驗收標準
+
+- [ ] GUI 部門列表出現「學術出版部」，含 publication-operator
+- [ ] research-director 的 `manages` 含 publication-operator
+- [ ] 設定頁可存取 ARS 路徑（zh-TW / en）
+- [ ] 單元測試涵蓋 api-design §6 全部契約與三個錯誤碼
+- [ ] 真實啟動證據：debug log 出現「Loaded 4 skills from plugin academic-research-skills」
+- [ ] 與 Hub 的 `--mcp-config` 並用時 SendMessage 仍可用；ARS hooks 不與 Hub hooks 衝突
+- [ ] resume 後 ARS 仍載入

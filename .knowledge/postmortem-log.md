@@ -45,6 +45,7 @@
 | mock DB 查詢 | 用 SQL-aware `mockImplementation`，不用 `mockReturnValueOnce` 佇列（會把實作私有呼叫順序寫死進測試） | PM-012 |
 | 測 exposed method | 不 `vi.spyOn` exposed proxy（Vue 3.5 攔不到 template ref 呼叫），改斷言可觀察 DOM 行為 | PM-012 |
 | Stop hook 報 lint/typecheck 失敗 | 先確認是否在無 node_modules 的 worktree 執行（`npm`/`tsc` not found ≠ 檢查紅）；到有 deps 的 clone 重跑再判定 | PM-014 |
+| 第三方 Claude plugin 從 zip 安裝（Windows） | git symlink 會變純文字 stub；用 `--debug-file` 確認「Loaded N skills」不是 0，stub 換成實體資料夾 | PM-015 |
 <!-- QUICKREF:END -->
 
 ---
@@ -338,3 +339,16 @@
 | 狀態 | open |
 | 到期日 | 2026-08-21 |
 | Backlog | `.tasks/backlog/PM-014-stop-validator-worktree-deps.md` |
+
+### 2026-09-27 — PM-015 ARS zip 解壓後 skills/ symlink 變成純文字 stub，plugin 載入 0 個 skill
+
+| 項目 | 內容 |
+|------|------|
+| 分類 | runtime |
+| 問題 | 用 `claude --plugin-dir <ARS 路徑>` 載入 academic-research-skills v3.22.2（zip 下載解壓），debug log 顯示 16 commands、3 agents 載入成功，但「Loaded 0 skills from plugin academic-research-skills」。`/ars-full` 第一步就要載入 `academic-pipeline` skill，會報載入失敗後停止。 |
+| 原因 | ARS repo 的 `skills/{academic-paper,academic-paper-reviewer,academic-pipeline,deep-research}` 是 git symlink（指向上層同名資料夾）。zip 下載到 Windows 後 symlink 退化成 16–26 bytes 純文字檔（內容如 `../academic-pipeline`），Claude Code 在 `skills/*/SKILL.md` 找不到任何 skill。只看「plugin 有載入」、commands 列得出來，會誤以為安裝成功。 |
+| 解法 | 備份 4 個 stub 到 session scratchpad，換成對應上層資料夾的實體複本（`cp -R`）。重測：debug log「Loaded 4 skills」，模型可見 `academic-research-skills:academic-pipeline` 等 4 個 skill。 |
+| 預防 | (1) 驗證 plugin 載入要看 debug log 的 skills／commands／agents 三個數字，不能只看有沒有報錯。(2) ARS 每次更新（重新下載 zip）都會再出現，Hub 啟動 publication-operator 前必須檢查 `<ARS>/skills/*/SKILL.md` 全部存在，否則明確報錯並提示修法（併入「ARS 整合」dev-plan）。 |
+| 狀態 | open |
+| 到期日 | 2026-10-11 |
+| Backlog | `.tasks/backlog/PM-015-ars-skills-symlink-check.md`（`.tasks/` 已 gitignore，檔案在主 clone） |

@@ -1,6 +1,6 @@
-# academic-research 部門結構（詳細欄位）
+# 學術事業群部門結構（academic-research ＋ academic-publication，詳細欄位）
 
-> 版本: v1.0 | Sprint 4 | 最後更新: 2026-04-11
+> 版本: v2.0 | Sprint 4 建立、Sprint 7 擴充（ARS 整合）| 最後更新: 2026-09-28
 > 本文件為 `agent-roster.md` 學術研究部的詳細補充，對齊 `.knowledge/specs/data-model.md` §1-2
 
 ---
@@ -34,7 +34,7 @@
 | level | L1 |
 | department | `academic-research` |
 | reports_to | `["boss", "project-lead"]` |
-| manages | `["literature-scout", "paper-writer", "research-analyst", "manuscript-reviewer", "research-visualizer", "grant-writer"]` |
+| manages | `["literature-scout", "paper-writer", "research-analyst", "manuscript-reviewer", "research-visualizer", "grant-writer", "publication-operator"]`（v2.0 加入出版部操作員） |
 | collaborates_with | `["product-manager", "tech-lead"]` |
 | skills | `["hypothesis", "critical-thinking"]` |
 | skills_sub | 所有下屬 Skills（統籌時可代呼叫） |
@@ -180,3 +180,44 @@
 3. **academic-research Agent 不得呼叫其他部門 Skills**（禁止跨部門 Skill 借用）
 4. **paper-writer 最終稿禁止 bullet points**（SKILL.md 強制規則）
 5. **literature-scout 的 DOI 驗證率 < 90% 時，流程自動暫停**
+6. **（v2.0）兩部門不互相借人**：研究部 Agent 不載入 ARS；publication-operator 不呼叫研究部 Skills；交接一律經 research-director
+7. **（v2.0）ARS 檢查點例外**：publication-operator 的 ARS 檢查點由老闆在互動 session 直接回覆，不算越級匯報（約束 1 的唯一例外）；任何 Agent（含總監）不得代答檢查點
+8. **（v2.0）出版部只能以互動模式啟動**：Hub 強制（`ARS_REQUIRES_INTERACTIVE`）
+
+---
+
+## 學術出版部（academic-publication，v2.0 新增）
+
+> Sprint 7 建立。運作規則見 `README.md`「學術事業群使用指南」；技術規格見 `.knowledge/specs/*.md` 第 6 節。
+
+- **部門代號**: `academic-publication`
+- **部門名稱**: 學術出版部（「生產線」：用 ARS 跑完整論文流程）
+- **成員數**: 1 位 L2（ARS 內部 39 個角色在 ARS 裡運作，**不拆成 Hub agent**）
+- **外部依賴**: Academic Research Skills（ARS），CC BY-NC 4.0，Hub 不內附，由使用者自行安裝後在設定頁填路徑
+
+### 8. publication-operator (L2) — 出版流程操作員
+
+| 欄位 | 值 |
+|------|-----|
+| id | `publication-operator` |
+| name | 出版流程操作員 |
+| level | L2 |
+| department | `academic-publication` |
+| reports_to | `["research-director"]` |
+| collaborates_with | `["project-lead"]`（僅進度、成本、阻塞） |
+| skills | ARS（`/ars-*` 指令與 4 個 ARS skills，由 Hub 啟動時注入） |
+| system_prompt_ref | `agents/definitions/academic-publication/publication-operator.md` |
+| 負責流程 | 整篇論文、系統性文獻回顧、大修與回覆信、投稿前體檢（README 分流表中標「出版部」者） |
+| 硬性規則 | 開案簡報經老闆確認才開跑；不代答 ARS 檢查點；例外情況回報總監 |
+
+### 兩部門指揮鏈（v2.0）
+
+```
+                    boss ◄──────────── ARS 檢查點（直接回覆）
+                     │                        │
+              research-director (L1)          │
+                     │                        │
+        ┌────────────┴─────────────┐          │
+  學術研究部（6 位 L2，見上圖）   學術出版部       │
+                              publication-operator
+```

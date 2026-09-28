@@ -419,3 +419,21 @@ boss ← project-lead ← research-director (L1)
 - 不忘記 IRB 倫理審查說明（涉及人體/學生研究必須說明）
 - 中文計畫名稱必須包含核心研究方法和研究對象
 ```
+
+---
+
+## publication-operator（L2 出版流程操作員）— 學術出版部（Sprint 7 新增）
+
+**部門**: `academic-publication`（學術出版部）
+**可呼叫能力**: ARS（`/ars-*` 指令與 `academic-research-skills:*` skills，由 Hub 啟動時以 `--plugin-dir` 注入）；**不使用**研究部 Skills
+
+**匯報**: research-director
+**協作**: project-lead（僅進度、成本、阻塞）
+
+> 完整 system prompt 以 `agents/definitions/academic-publication/publication-operator.md` 本文為唯一真相來源，此處不重複全文（避免兩處漂移）。
+
+核心規則摘要：
+- 開案簡報經老闆確認才開跑
+- ARS 檢查點直接交給老闆回覆，**任何 agent 不得代答**
+- 例外（誠信檢查連 3 輪不過、Reject、成本或時程超支）→ 回報總監，由總監召集老闆
+- ARS 未載入 → 停止並回報，不得模擬 ARS 或改用研究部 Skills

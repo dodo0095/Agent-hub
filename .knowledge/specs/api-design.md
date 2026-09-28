@@ -1,6 +1,6 @@
 # Sprint 4 — Skill 命名與介面規範
 
-> 版本: v1.0 | Sprint 4 | 最後更新: 2026-04-11
+> 版本: v2.0 | Sprint 4 建立、Sprint 7 擴充（ARS 整合）| 最後更新: 2026-09-28
 > 範圍: `academic-research` 部門新增的 13 個 Skills 命名與呼叫介面
 
 ## 概述
@@ -93,3 +93,52 @@ Skill 執行完成後的產出必須符合：
 | 文獻搜尋 0 筆結果 | 要求 literature-scout 放寬關鍵字，最多重試 3 次 |
 | 產出含 bullet points（論文類） | Skill 自檢失敗，自動要求 paper-writer 重寫 |
 | 國科會格式違規 | nstc-grant Skill 抛出 `FormatError`，交 grant-writer 修正 |
+
+---
+
+## 6. Sprint 7 — ARS 整合介面（v2.0 新增）
+
+> 依據：`proposal/tech-decision-ars-integration.md`（D1-A、D2-A）、`proposal/sprint7-dev-plan.md`
+
+### 6.1 設定值
+
+| key | 範圍 | 值 | 存取方式 |
+|-----|------|----|---------|
+| `ars.plugin-dir` | 全域（非專案層級） | ARS 根目錄絕對路徑（含 `.claude-plugin/plugin.json` 的那層） | 既有 IPC `settings:get` / `settings:update`，**不新增通道** |
+
+### 6.2 Spawn 參數契約（`buildClaudeArgs`）
+
+| 條件 | 行為 |
+|------|------|
+| agent.department === `academic-publication`（一般啟動或 resume） | 依序：讀 `ars.plugin-dir` → `validateArsPluginDir()` → 檢查互動模式 → `args.push('--plugin-dir', <path>)` |
+| 其他部門 | 參數與 Sprint 7 前**完全相同**（不讀設定、不驗證、不加參數） |
+| 判斷依據 | 用 department，不寫死 agent id |
+
+### 6.3 驗證器
+
+```typescript
+// electron/utils/ars-validator.ts
+export const ARS_REQUIRED_FILES = [
+  '.claude-plugin/plugin.json',
+  'skills/academic-paper/SKILL.md',
+  'skills/academic-paper-reviewer/SKILL.md',
+  'skills/academic-pipeline/SKILL.md',
+  'skills/deep-research/SKILL.md',
+] as const;
+export interface ArsValidationResult { ok: boolean; missing: string[] }
+export function validateArsPluginDir(dir: string): ArsValidationResult;
+```
+
+- 路徑不存在 → `{ ok: false, missing: [全部 ARS_REQUIRED_FILES] }`
+- `skills/<name>` 是檔案而非資料夾（zip 解壓的 symlink stub，PM-015）→ 對應 `SKILL.md` 列入 `missing`
+- 只檢查存在性，不解析內容
+
+### 6.4 錯誤碼
+
+| 錯誤碼 | 觸發條件 | 訊息須包含 |
+|--------|---------|-----------|
+| `ARS_PATH_NOT_SET` | `ars.plugin-dir` 未設定或空字串 | 到「設定」填寫 ARS 路徑的提示 |
+| `ARS_INSTALL_INCOMPLETE` | 驗證器 `ok === false` | 缺少的檔案清單；「若為 zip 下載，請把 skills/ 內的 stub 檔換成同名資料夾，或改用 git clone」 |
+| `ARS_REQUIRES_INTERACTIVE` | 出版部 agent 以非互動模式（`interactive === false`）啟動 | 「ARS 檢查點必須由老闆回覆，出版部只能以互動模式啟動」 |
+
+錯誤以 `Error` 拋出，`message` 以錯誤碼開頭（例：`ARS_PATH_NOT_SET: ...`），session 不得被建立。

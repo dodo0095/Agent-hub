@@ -1,6 +1,6 @@
 # Sprint 4 — Agent / Skill 結構模型
 
-> 版本: v1.0 | Sprint 4 | 最後更新: 2026-04-11
+> 版本: v2.0 | Sprint 4 建立、Sprint 7 擴充（ARS 整合）| 最後更新: 2026-09-28
 > 範圍: `academic-research` 部門的 Agent 階層 + Skill 綁定關係
 
 ## 概述
@@ -118,3 +118,45 @@ academic-research 部門（新增）
 2. **L2 不得直接向 boss 匯報**：必須經 research-director。
 3. **nstc-grant 僅限 grant-writer 呼叫**：其他 Agent 一律禁用（防止 Skill 誤用）。
 4. **`.outputs/` 絕不進 git**：學術產出可能涉及未發表研究，需隔離。
+5. **（v2.0）出版部 Agent 只能使用 ARS，不得呼叫研究部 Skills；研究部 Agent 不載入 ARS**（兩部門不互相借人，交接經 research-director）。
+6. **（v2.0）ARS 檢查點例外**：Publication Operator 的互動 session 中，ARS 檢查點由老闆直接回覆；這屬於「作者放行」，不視為 L2 越級匯報。進度、例外與結案回報仍一律經 research-director。
+
+---
+
+## 6. Sprint 7 — 學術出版部（v2.0 新增）
+
+### 6.1 部門階層
+
+```
+research-director (L1, academic-research) ── 同時管理兩部門
+├── academic-research 部門（學術研究部，「工具箱」）── 6 位 L2（見第 1 節）
+└── academic-publication 部門（學術出版部，「生產線」）
+    └── publication-operator (L2) ── ARS 流程操作員
+```
+
+| 部門代號 | 中文名稱 | 顏色 | 定義檔目錄 |
+|---------|---------|------|-----------|
+| `academic-publication` | 學術出版部 | `orange`（BaseTag 支援的色值之一） | `agents/definitions/academic-publication/` |
+
+### 6.2 publication-operator 欄位
+
+| 欄位 | 值 |
+|------|-----|
+| id | `publication-operator` |
+| name | 出版流程操作員 |
+| level | L2 |
+| department | `academic-publication` |
+| reports_to | `research-director` |
+| coordinates_with | `project-lead`（只回報進度、成本與阻塞） |
+| model | `sonnet`（Sprint 7 T7 實測成本後再評估） |
+| tools | Read, Write, Edit, Bash, Grep, Glob, Skill |
+| 外部能力 | ARS（啟動時由 Hub 以 `--plugin-dir` 注入，見 api-design §6） |
+| system_prompt_ref | `agents/definitions/academic-publication/publication-operator.md` 本文 |
+
+research-director 的 `manages` 加入 `publication-operator`（共 7 位）。
+
+### 6.3 設定儲存
+
+| 表 | key | 說明 |
+|----|-----|------|
+| `user_preferences` | `ars.plugin-dir` | ARS 根目錄路徑；無 schema 變更（沿用既有 key-value 表） |
