@@ -273,7 +273,7 @@ Project Lead（協作）── 只追排程、成本與阻塞，不碰學術內�
    - 下載 [Academic Research Skills](https://github.com/Imbad0202/academic-research-skills)（建議 `git clone`），放在固定位置，例如 `ALL PROJECT/academic-research-skills-main/`。**不要**用 `claude plugin install` 全域安裝——ARS 只給出版部用，Hub 會在啟動 Publication Operator 時自動載入。
    - ⚠️ **Windows 用 zip 下載時**：`skills/` 裡的 4 項（`academic-paper`、`academic-paper-reviewer`、`academic-pipeline`、`deep-research`）會變成幾十 bytes 的小檔案（原本是捷徑），ARS 會載入 0 個 skill。請把這 4 個小檔刪掉，換成上層同名資料夾的複本（PM-015）。
    - 到 Hub「設定 → 學術出版部」填入 ARS 根目錄（含 `.claude-plugin` 資料夾的那層）。
-   - 啟動 Publication Operator 時 Hub 會先檢查 ARS 是否完整；路徑沒填、檔案缺漏或非互動模式啟動，一律拒絕啟動，不會出現一個沒有 ARS 的操作員。從 GUI 啟動或接續（新增 session、可恢復對話的 Resume）時，畫面會跳出錯誤提示並說明修法。⚠️ 目前限制：若是總監用訊息指派、由 Hub 自動啟動操作員，失敗只記在 log、畫面上不會提示（待修，backlog `S7-MN1`）；總監派工後若操作員沒有動靜，請先到「設定 → 學術出版部」確認 ARS 路徑。
+   - 啟動 Publication Operator 時 Hub 會先檢查 ARS 是否完整；路徑沒填、檔案缺漏或非互動模式啟動，一律拒絕啟動，不會出現一個沒有 ARS 的操作員。從 GUI 啟動或接續（新增 session、可恢復對話的 Resume）時，畫面會跳出錯誤提示並說明修法。若是總監用訊息指派、由 Hub 自動啟動操作員而失敗，畫面同樣會跳出錯誤提示，總監也會收到系統回訊並轉告你；同一個錯誤 5 分鐘內只提示一次、這段期間不會重試；到「設定 → 學術出版部」修好 ARS 路徑後，待處理的訊息會在冷卻結束（最多 5 分鐘）後自動重試投遞。
 
 **常見情境**
 

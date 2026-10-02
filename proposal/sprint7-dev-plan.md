@@ -244,11 +244,11 @@ Sprint 7 交付後的兩個已知問題，併入 Sprint 7 一起結案（老闆�
 | T6 | 2026-09-28 | ✅ 完成 | 設定頁 ARS 路徑；T7／G2 追加：所有啟動與接續入口失敗時顯示 toast（0a55011、f130d0f） |
 | T7 | 2026-09-28 | ✅ 完成 | CLI 層五項驗證（fresh-context agent），第 5 項原 ⚠️ 已修；GUI 畫面未截圖（未驗證）。證據 `docs/reviews/sprint7-t7-evidence.md` |
 | T8 | 2026-09-28 | ✅ 完成 | README 🚧→✅＋安裝說明與自動啟動限制；PM-015 resolved；PM-016 記錄 |
-| T9 | | | |
-| T10 | | | |
-| T11 | | | |
-| T12 | | | |
-| T13 | | | |
+| T9 | 2026-09-28 | ✅ 完成 | 三條路徑共用 `injectMcpConfigIfNeeded`；`resolvedAgentId` 供 session-manager 登記原 agent 身分；PM-016 錯誤註解移除（43ac50c、778c725） |
+| T10 | 2026-09-28 | ✅ 完成 | ARS_* 冷卻 5 分鐘、去重通知、system 回訊、防迴圈；兩條 auto-spawn 路徑皆套用（43ac50c、778c725） |
+| T11 | 2026-09-28 | ✅ 完成 | 沿用既有 `notification` 通道（無新 IPC）；App 層單次訂閱＋toast；zh-TW／en 各 612 key 一致（43ac50c、778c725） |
+| T12 | 2026-10-03 | ✅ 完成 | fresh-context agent 驗收：CLI 2.1.283 實測 `--resume`＋`--mcp-config` send-message connected，對照組重現 PM-016；全套 485/485；0 Blocker／0 Major／5 Minor（R71-01～05，轉 backlog `S7.1-review-minors`）。GUI 畫面未驗證。證據 `docs/reviews/sprint7.1-evidence.md` |
+| T13 | 2026-10-03 | ✅ 完成 | README 移除「自動啟動失敗只記 log」限制並改寫為現行行為；PM-016 resolved；兩個 backlog 已 done；新增 backlog `S7.1-review-minors`（R71-01～05、G4-71-06、resume 實機傳訊驗證） |
 
 ### Review 紀錄
 
@@ -258,6 +258,8 @@ Sprint 7 交付後的兩個已知問題，併入 Sprint 7 一起結案（老闆�
 | 實作 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-g2-review.md`（四輪；最終 0 Blocker／0 Major） |
 | 測試 Review | 2026-09-28 | 通過 | `docs/reviews/sprint7-t7-evidence.md`；全套 437/437 |
 | 文件 Review | 2026-09-28 | 通過 | 第五輪 G4 複審 0 Blocker／0 Major／0 未修 Minor（`docs/reviews/sprint7-g2-review.md`） |
+| 7.1 實作＋測試 Review | 2026-10-03 | 通過 | `docs/reviews/sprint7.1-evidence.md`（對程式碼＋對規範；0 Blocker／0 Major／5 Minor） |
+| 7.1 文件 Review（G4） | 2026-10-03 | 通過 | fresh-context 複審 6 條全過，重新實測 485/485、612 key、CLI 2.1.283；額外 Minor G4-71-06（重複投遞，推論未重現）轉 backlog |
 
 ### Gate 紀錄
 

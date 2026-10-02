@@ -361,8 +361,8 @@
 | 分類 | runtime |
 | 問題 | `electron/services/session-spawn-helpers.ts` 的 MCP 注入區塊註解寫「resume sessions inherit the original session's MCP config automatically」，所以兩條 resume 路徑都不傳 `--mcp-config`。Sprint 7 T7 以 Claude Code 2.1.283 實測：`claude --resume <id>` 的 `system.init.mcp_servers` 沒有 send-message server，resume 回來的 session 無法用 SendMessage／ListInbox。 |
 | 原因 | 註解的前提（CLI 會繼承原 session 的 MCP 設定）沒有經過實測；`--mcp-config` 與 `--plugin-dir` 一樣只對單次 CLI 呼叫生效。 |
-| 解法 | 尚未修（CLI 層實測，未在 Hub GUI 內重現）。Sprint 7 已對 `--plugin-dir` 在 resume 時重新注入；`--mcp-config` 待 backlog 處理。 |
+| 解法 | Sprint 7.1 T9：一般啟動與兩條 resume 路徑共用 `injectMcpConfigIfNeeded`（`electron/services/session-spawn-helpers.ts`）重新注入 `--mcp-config`，錯誤註解移除；`buildClaudeArgs` 回傳 `resolvedAgentId`，resume 的 session 以原 agent 身分登記。 |
 | 預防 | 關於「CLI 參數是否跨 resume 保留」的假設一律用 `--debug-file` 或 `--output-format json` 的 `system.init` 實證（同 PM-010 原則），不寫未驗證的註解。 |
-| 狀態 | open |
+| 狀態 | resolved（2026-10-03，Sprint 7.1：T12 以 CLI 2.1.283 實測 `--resume`＋`--mcp-config` 後 send-message connected，證據 `docs/reviews/sprint7.1-evidence.md`；Hub GUI 內 resume 後實際跨 agent 傳訊未驗證） |
 | 到期日 | 2026-10-12 |
 | Backlog | `.tasks/backlog/S7-resume-mcp-config-lost.md`（`.tasks/` 已 gitignore，檔案在主 clone） |
